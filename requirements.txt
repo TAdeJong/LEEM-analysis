@@ -1,0 +1,22 @@
+python >= 3.5
+
+numpy
+scipy >= 1.2
+matplotlib
+ipywidgets
+dask
+distributed
+xarray
+scikit-image
+netcdf4
+
+# Some optimization in the drift correction algorithm
+numba
+
+# For the PCA classification
+scikit-learn
+dask-ml
+zarr
+
+# For contribution
+jupytext
