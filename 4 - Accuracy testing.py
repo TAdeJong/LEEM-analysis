@@ -1,12 +1,12 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: ipynb,auto:light
+#     formats: ipynb,py:light
 #     text_representation:
 #       extension: .py
 #       format_name: light
-#       format_version: '1.3'
-#       jupytext_version: 0.8.6
+#       format_version: '1.4'
+#       jupytext_version: 1.2.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -42,6 +42,7 @@ plt.colorbar();
 # The $x$ and $y$ coordinate are independent in the algorithm. We take advantage of this by testing two types of displacements at once: a parabolic displacement in the $x$-direction and a random one for $y$.
 
 length = 200
+dE = 10
 x = np.arange(length)
 xshifts = x**2/(4*length)
 xshifts -= xshifts.mean()
@@ -53,27 +54,22 @@ plt.plot(yshifts)
 plt.ylabel('shift')
 plt.xlabel('index');
 
+
 # Next, we apply the shifts to (copies of the annulus image) to create the dataset
 
 # +
-def syn_shift_blocks(shiftsX, shiftsY, image):
+@da.as_gufunc(signature="(i,j),(2)->(i,j)", output_dtypes=float, vectorize=True)
+def syn_shift_images(image, shifts):
     """Shift copies of image over shiftsX and shiftsY."""
-    result = np.stack([image] * dE)
-    for index in range(dE): 
-        result[index,...] = shift(result[index,...],
-              shift=(shiftsX[index,...],shiftsY[index,...]), 
-              order=1,
-              )
-    return result
+    return shift(image, shift=shifts, order=1)
 
 da_annulus = da.from_array(annulus, chunks='auto' )
-xshifts = da.from_array(xshifts[:,np.newaxis,np.newaxis], chunks=(dE,1,1))
-yshifts = da.from_array(yshifts[:,np.newaxis,np.newaxis], chunks=(dE,1,1))
+shifts = da.from_array(np.stack([xshifts, yshifts], axis=1), chunks=(dE,2))
 
-synthetic = da.map_blocks(syn_shift_blocks, xshifts, yshifts, da_annulus,
-                          dtype=annulus.dtype,
-                          chunks=(dE,annulus.shape[0],annulus.shape[1]),
-                         )
+synthetic = syn_shift_images(da_annulus, shifts)
+
+
+# -
 
 def only_filter(images, sigma=11, mode='nearest'):
     """Apply the filters.
@@ -85,7 +81,7 @@ def only_filter(images, sigma=11, mode='nearest'):
         si = int(np.ceil(sigma))
         result = result[:,si:-si,si:-si]
     return result
-# -
+
 
 # Create the random noise to be added in different magnitudes to the data.
 da.random.seed(42)
@@ -110,11 +106,11 @@ for A in As:
             sobel = sobel - sobel.mean(axis=(1,2), keepdims=True)  
             Corr = dask_cross_corr(sobel)
             weights, argmax = max_and_argmax(Corr)
-            Wc, Mc = calculate_halfmatrices(weights, argmax)
-            coords = np.arange(Wc.shape[0])*stride + start
+            Wc, Mc = calculate_halfmatrices(weights, argmax, fftsize=fftsize)
+            coords = np.arange(Wc.shape[0])
             coords, weightmatrix, DX, DY, row_mask = threshold_and_mask(0.0, Wc, Mc, coords=coords)
             dx, dy = calc_shift_vectors(DX, DY, weightmatrix, wpower=4)
-            ddx, ddy = [interp_shifts(coords, dx, length).squeeze(), interp_shifts(coords, dy, length).squeeze()]
+            ddx, ddy = interp_shifts(coords, [dx,dy], length)
             res.loc[dict(s=s,A=A,direction='x')] = ddx
             res.loc[dict(s=s,A=A,direction='y')] = ddy
             print(f"A={A}, s={s} completed")
