@@ -78,40 +78,6 @@ def calculate_halfmatrices(weights, argmax, fftsize=128):
     # Mc = Mc / z_factor  # Compensate for zoomfactor
     return Wc, Mc
 
-def calculate_halfmatrices2(weights, argmax, fftsize=128):
-    """Calculate the half matrices of the weights and the argmax
-    and reconstruct the full arrays as numpy arrays now."""
-    # Calculate half of the matrices only, because we know it is antisymmetric.
-    argmax = argmax.map_blocks(lambda indices: np.stack(np.unravel_index(indices, shape=(fftsize*2, fftsize*2))), 
-                      argmax,
-                      chunks=((2,)) + indices.chunks,
-                      new_axis=1,
-                      )
-    argmax -= fftsize
-    uargmax = da.triu(argmax, 1) # Diagonal shifts are zero anyway, so 1. Reconstruct after computation
-
-    uW = da.triu(weights, 1)
-    uW = uW + uW.T + da.diag(da.diag(weights))
-
-    # Do actual computations, get a cup of coffee
-    Mc, Wc = da.compute(uargmax, uW)
-
-    # Undo the flatten: Reconstruct 2D indices from global linear indices of argmax
-    Mc = np.stack(np.unravel_index(Mc, (fftsize*2, fftsize*2))) 
-    Mc -= np.triu(np.full_like(Mc, fftsize), 1)  # Compensate for the fft-shift
-    Mc = Mc - Mc.swapaxes(1,2)  # Reconstruct full antisymmetric matrices
-    # Mc = Mc / z_factor  # Compensate for zoomfactor
-    return Wc, Mc
-
-def sym_reduc(array, sym_axes=(1,2), anti=False):
-    """Reduce the computation of duplicate array elements by exploiting
-    symmetry or antisymmetry along sym_axes"""
-    if anti:
-        res = da.triu(array, 1)
-        res = res - res.swapaxis(*sym_axes)
-    else:
-        res = da.triu(array, 1) + da.triu(array, 0)
-
 
 def threshold_and_mask(min_normed_weight, W, Mc, coords): #=np.arange(Wc.shape[0])*stride + start):
     """Normalize the weights W, threshold to min_normed_weight and remove diagonal,
@@ -134,7 +100,6 @@ def threshold_and_mask(min_normed_weight, W, Mc, coords): #=np.arange(Wc.shape[0
     #mask_red = mask[row_mask, :][:, row_mask]
     DX_m, DY_m = DX[row_mask, :][:, row_mask], DY[row_mask, :][:, row_mask]
     return coords, W_n_m, DX_m, DY_m, row_mask
-
 
 
 def construct_jac(W):
