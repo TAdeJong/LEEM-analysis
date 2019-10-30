@@ -15,29 +15,38 @@
 
 # +
 import numpy as np
+import os
+import numba
+import time
+import dask
+
 import dask.array as da
 from dask.delayed import delayed
-from dask.distributed import Client
+from dask.distributed import Client, LocalCluster
+import xarray as xr
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+
 import ipywidgets as widgets
 from ipywidgets import interactive
+
 from scipy.optimize import least_squares
 from scipy.ndimage.interpolation import zoom, shift
 from scipy.interpolate import interp1d
+
 from skimage import filters
 import scipy.sparse as sp
-import dask
-import numba
-import time
 
-from pyL5.lib.analysis.container import Container
+
+
+#from pyL5.lib.analysis.container import Container
 
 from Registration import *
+# -
 
-
-plt.rcParams["figure.figsize"] = [12.,8.]
-client = Client('localhost:8786')
+plt.rcParams["figure.figsize"] = [12., 8.]
+cluster = LocalCluster(n_workers=1, threads_per_worker=8)
+client = Client(cluster)
 
 # +
 client.upload_file('Registration.py')
@@ -46,29 +55,34 @@ def plot_stack(images, n):
     """Plot the n-th image from a stack of n images.
     For interactive use with ipython widgets"""
     im = images[n, :, :].compute()
+    plt.figure(figsize=[12,10])
     plt.imshow(im.T, cmap='gray', vmax=im.mean()*5)
     plt.show()
 
 # +
-#TODO: Update
-folder = r'.\data\20171120_160356_3.5um_591.4_IVhdr'
-start, stop, stride, dE = 40, 752, 1, 10 #BF
+folder = r'./data'
+name = '20171120_160356_3.5um_591.4_IVhdr'
+start, stop, stride, dE = 0, -1, 1, 10 #BF
 #start, stop, stride, dE = 0, 412, 1, 10 #DF
 Eslice = slice(start, stop, stride)
 
 # Grab a window of 2*fftsize around the center of the picture
-fftsize=256*2 // 2
+fftsize=256 // 2
 z_factor = 1
 # -
 
-original = Container(folder + '/data.h5').getStack('CPcorrected').getDaskArray()
+os.path.join(folder, name + '_detectorcorrected.zarr')
+
+original = xr.open_dataset(os.path.join(folder, name + '_detectorcorrected.nc'), chunks={'time': dE})
+original = original.Intensity.data
+
 interactive(lambda n: plot_stack(original, n), 
-            n=widgets.IntSlider(1, 0, original.shape[0]-1, 1, continuous_update=False)
+            n=widgets.IntSlider(original.shape[0]//2, 0, original.shape[0]-1, 1, continuous_update=False)
            ) 
 
 # Step 1 to 3 of the algorithm as described in paper.
-sobel = crop_and_filter(original[Eslice,...].rechunk({0:dE}), sigma=15, finalsize=2*fftsize)
-sobel = (sobel - sobel.mean(axis=(1,2), keepdims=True)).persist()  
+sobel = crop_and_filter(original[Eslice,...].rechunk({0:dE}), sigma=3, finalsize=2*fftsize)
+sobel = (sobel - sobel.mean(axis=(1,2), keepdims=True)) #.persist()  
 sobel
 
 # Step 4 of the algorithm as described in paper.
@@ -131,9 +145,11 @@ display(widget)
 weights, argmax = max_and_argmax(Corr)
 
 # Do actual computations; get a cup of coffee
+t = time.time()
 Wc, Mc = calculate_halfmatrices(weights, argmax, fftsize=fftsize)
+print(time.time()-t)
 
-#Step 6 of the algorithm
+### Step 6 of the algorithm
 wc_diag = np.atleast_2d(np.diag(Wc))
 W_n = Wc / np.sqrt(wc_diag.T*wc_diag)
 
@@ -196,7 +212,18 @@ shifts = np.stack(interp_shifts(coords, [dx, dy], n=original.shape[0]), axis=1)
 neededMargins = np.ceil(shifts.max(axis=0)).astype(int)
 shifts = da.from_array(shifts[...,np.newaxis], chunks=(dE,-1,1))
 
+shifts
+
 # +
+def plot_stack_grid(images, n):
+    """Plot the n-th image from a stack of n images.
+    For interactive use with ipython widgets"""
+    im = images[n, :, :].compute()
+    plt.figure(figsize=[12,10])
+    plt.imshow(im.T, cmap='gray', vmax=im.mean()*5)
+    plt.grid()
+    plt.show()
+
 #Step 9, the actual shifting of the original images
 corrected = da.map_blocks(shift_block, original.rechunk({0:dE}), shifts,
                           margins=neededMargins,
@@ -209,7 +236,7 @@ corrected = da.map_blocks(shift_block, original.rechunk({0:dE}), shifts,
 corrected = corrected[:original.shape[0], ...]  
 
 # Do an interactive viewer to inspect the results
-interactive(lambda n: plot_stack(corrected, n), 
+interactive(lambda n: plot_stack_grid(corrected, n), 
             n=widgets.IntSlider(1,0,corrected.shape[0]-1,1, continuous_update=False)
            ) 
 # -
@@ -218,8 +245,13 @@ interactive(lambda n: plot_stack(corrected, n),
 import zarr
 from numcodecs import Blosc
 compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
-corrected.to_zarr(folder + r'\Driftcorrected.zarr', overwrite=True, compressor=compressor)
+corrected.to_zarr(os.path.join(folder, name + '_driftcorrected.zarr'), 
+                  overwrite=True, compressor=compressor)
 
 #Or, although parallel access to HDF5 is hard, so go single process, save to hdf5
 with dask.config.set(scheduler='threads'):  
-    corrected.to_hdf5(folder + r'\newDriftCorrected_gaussian_{:.1f}.h5'.format{sigma}, '/stack')
+    corrected.to_hdf5(folder + name + r'\driftCorrected.h5', '/stack')
+
+corrected
+
+

@@ -1,7 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: ipynb,auto:light
+#     formats: ipynb,py:light
 #     text_representation:
 #       extension: .py
 #       format_name: light
@@ -109,7 +109,7 @@ data = xr.concat([lowdata, highdata], dim='strides')
 # instead of the time upto that step which is saved, so take a diff
 
 data = xr.concat([data.isel(t=1), data.isel(t=slice(2,5)).diff(dim='t', label='lower'), data.isel(t=4)], 't')
-data.attrs['long_name'] = 'Running time'
+data.attrs['long_name'] = 'Run time'
 data.attrs['units'] = 's'
 
 # Define a nicer 'Phase' dimension instead of 't'
@@ -142,3 +142,6 @@ facetgrid.axes[0,2].set_title('Phase:\nShift & write')
 facetgrid.axes[0,3].set_title('Total')
 plt.subplots_adjust(top=0.8, bottom=0.18, left=0.08, wspace=0.1)
 plt.savefig('timebench.pdf')
+# -
+
+
