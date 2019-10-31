@@ -5,8 +5,8 @@
 #     text_representation:
 #       extension: .py
 #       format_name: light
-#       format_version: '1.3'
-#       jupytext_version: 0.8.6
+#       format_version: '1.4'
+#       jupytext_version: 1.2.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -31,47 +31,46 @@ import ipywidgets as widgets
 from ipywidgets import interactive
 
 from scipy.optimize import least_squares
-from scipy.ndimage.interpolation import zoom, shift
+#from scipy.ndimage.interpolation import shift 
+import scipy.ndimage as ndi
+import scipy.sparse as sp
 from scipy.interpolate import interp1d
 
 from skimage import filters
-import scipy.sparse as sp
 
-
-
-#from pyL5.lib.analysis.container import Container
 
 from Registration import *
 # -
 
 plt.rcParams["figure.figsize"] = [12., 8.]
-cluster = LocalCluster(n_workers=1, threads_per_worker=8)
+cluster = LocalCluster(n_workers=2, threads_per_worker=5, memory_limit='15GB')
 client = Client(cluster)
+client
 
 # +
 client.upload_file('Registration.py')
 
-def plot_stack(images, n):
+def plot_stack(images, n, grid=False):
     """Plot the n-th image from a stack of n images.
     For interactive use with ipython widgets"""
     im = images[n, :, :].compute()
     plt.figure(figsize=[12,10])
-    plt.imshow(im.T, cmap='gray', vmax=im.mean()*5)
+    plt.imshow(im.T, cmap='gray', vmax=im.max())
+    if grid:
+        plt.grid()
     plt.show()
 
 # +
 folder = r'./data'
 name = '20171120_160356_3.5um_591.4_IVhdr'
-start, stop, stride, dE = 0, -1, 1, 10 #BF
-#start, stop, stride, dE = 0, 412, 1, 10 #DF
+start, stop, stride, dE = 40, -1, 1, 10 #BF
+#start, stop, stride, dE = 0, -1, 1, 10 #DF
 Eslice = slice(start, stop, stride)
 
 # Grab a window of 2*fftsize around the center of the picture
-fftsize=256 // 2
+fftsize=256 * 2 // 2
 z_factor = 1
 # -
-
-os.path.join(folder, name + '_detectorcorrected.zarr')
 
 original = xr.open_dataset(os.path.join(folder, name + '_detectorcorrected.nc'), chunks={'time': dE})
 original = original.Intensity.data
@@ -210,36 +209,33 @@ plt.legend()
 # Interpolate the shifts for all values not in coords
 shifts = np.stack(interp_shifts(coords, [dx, dy], n=original.shape[0]), axis=1)
 neededMargins = np.ceil(shifts.max(axis=0)).astype(int)
-shifts = da.from_array(shifts[...,np.newaxis], chunks=(dE,-1,1))
-
+shifts = da.from_array(shifts, chunks=(dE,-1))
 shifts
 
-# +
-def plot_stack_grid(images, n):
-    """Plot the n-th image from a stack of n images.
-    For interactive use with ipython widgets"""
-    im = images[n, :, :].compute()
-    plt.figure(figsize=[12,10])
-    plt.imshow(im.T, cmap='gray', vmax=im.mean()*5)
-    plt.grid()
-    plt.show()
 
+# +
 #Step 9, the actual shifting of the original images
-corrected = da.map_blocks(shift_block, original.rechunk({0:dE}), shifts,
-                          margins=neededMargins,
-                          dtype=original.dtype, 
-                          chunks=(dE,
-                                  original.shape[1] + neededMargins[0], 
-                                  original.shape[2] + neededMargins[1]),
-                         )
-# Remove the extra images introduced at the end by the explicit chunk size of the map_blocks call:
-corrected = corrected[:original.shape[0], ...]  
+
+#Inferring output dtype is not supported in dask yet, so we need original.dtype here.
+@da.as_gufunc(signature="(i,j),(2)->(i,j)", output_dtypes=original.dtype, vectorize=True)
+def shift_images(image, shift):
+    """Shift image over shift."""
+    return ndi.shift(image, shift=shift, order=1)
+
+padded = da.pad(original.rechunk({0:dE}), 
+                ((0, 0), 
+                 (0, neededMargins[0]), 
+                 (0, neededMargins[1])
+                ),
+                mode='constant'
+               )
+corrected = shift_images(padded.rechunk({1:-1, 2:-1}), shifts)
+# -
 
 # Do an interactive viewer to inspect the results
-interactive(lambda n: plot_stack_grid(corrected, n), 
-            n=widgets.IntSlider(1,0,corrected.shape[0]-1,1, continuous_update=False)
+interactive(lambda n: plot_stack(corrected, n, grid=True), 
+            n=widgets.IntSlider(corrected.shape[0]//4,0,corrected.shape[0]-1,1, continuous_update=False)
            ) 
-# -
 
 # Save the results to zarr
 import zarr
@@ -251,7 +247,3 @@ corrected.to_zarr(os.path.join(folder, name + '_driftcorrected.zarr'),
 #Or, although parallel access to HDF5 is hard, so go single process, save to hdf5
 with dask.config.set(scheduler='threads'):  
     corrected.to_hdf5(folder + name + r'\driftCorrected.h5', '/stack')
-
-corrected
-
-

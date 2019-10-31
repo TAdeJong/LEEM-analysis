@@ -5,8 +5,8 @@
 #     text_representation:
 #       extension: .py
 #       format_name: light
-#       format_version: '1.3'
-#       jupytext_version: 0.8.6
+#       format_version: '1.4'
+#       jupytext_version: 1.2.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -19,7 +19,6 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from pyL5.lib.analysis.container import Container
 from scipy.optimize import least_squares
 import xarray as xr
 import os
@@ -29,7 +28,7 @@ import dask.array as da
 radius = 100
 folder = './data'
 DC_dat =  xr.open_dataset(os.path.join(folder, '20171205_115846_0.66um_475.8_DC.nc'))
-DC_dat.mcount
+DC_dat
 
 # +
 DC = DC_dat['Intensity'].mean(dim='time')
@@ -163,7 +162,6 @@ plt.savefig(f'Channelplate_calibration_test_{len(res)}.pdf')
 cont = xr.open_dataset(os.path.join(folder, '20171120_160356_3.5um_591.4_IVhdr.nc'), chunks={'time': 5})
 cont.Intensity.attrs
 
-# multiplier = np.array(cont["MULTIPLIER"])
 data = cont['Intensity'].data
 data
 
@@ -178,25 +176,18 @@ def correctImages(image, darkCount, normFF):
     Corr_image = Corr_image.astype(np.uint16)
     return Corr_image, np.atleast_1d(multiplier.squeeze())
 
-# +
 G_MCP = multiplier_from_CP(cont["MCP_bias"].compute())
 # Use the mirror mode, where all electrons are reflected, as flat field
-FF = (data[:32].mean(axis=0) - DC) 
+FF = (data[:32].mean(axis=0) - DC)
+# Do not scale for pixels outside the channelplate
+FF = da.where(FF > 0.1*FF.max(), FF, FF.max())
+plt.imshow(FF.compute().T, cmap='gray')
+plt.colorbar()
 
 corrected, multiplier = correctImages(data, DC, FF / G_MCP[:32].mean())
 multiplier *= G_MCP
 rawimage = data[77]
 CPcorimage = corrected[77] / multiplier[77]
-# -
-
-#To be removed
-cont2 = Container(os.path.join(folder, '20171120_160356_3.5um_591.4_IVhdr.nlp'))
-#plt.semilogy()
-plt.plot(cont['Energy'], G_MCP/cont2["MULTIPLIER"]/0.017)
-plt.ylabel('new/old multiplier ratio', color='C0')
-plt.twinx()
-plt.plot(cont.Energy, cont.MCP_bias, color='r')
-plt.ylabel('MCP bias (kV)', color='red')
 
 fig, axs = plt.subplots(2,2, constrained_layout=True, figsize=[8, 4.9])
 im = axs[0,0].imshow(DC.T/16., interpolation='none')
@@ -238,10 +229,16 @@ plt.legend(lns, labs)
 plt.tight_layout()
 plt.savefig('DC_and_Flatfield2.pdf', dpi=300)
 
-import zarr
-from numcodecs import Blosc
-compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
-corrected.to_zarr(os.path.join(folder, '20171120_160356_3.5um_591.4_IVhdr_detectorcorrected.zarr'), overwrite=True, compressor=compressor)
+# ## Saving data
+#
+# Finally, we save both the corrected images and the multiplier to a new netCDF dataset via xarray
+
+xrcorrected = cont.copy()
+xrcorrected.Intensity.data = corrected
+xrcorrected.Intensity.attrs['DetectorCorrected'] = 'True'
+xrcorrected['multiplier'] = (('time'), multiplier)
+xrcorrected.to_netcdf(os.path.join(folder, '20171120_160356_3.5um_591.4_IVhdr_detectorcorrected.nc'))
+xrcorrected
 
 # ## Comparison of results
 # Finally, we visualize the effect of active tuning of the gain by plotting a spectrum measured with regular settings and one with adaptive gain.
@@ -266,15 +263,4 @@ axs[1].legend()
 plt.tight_layout(h_pad=0.0, pad=0)
 plt.savefig('HDRcomparison.pdf')
 
-xrcorrected = cont.copy()
-#xrcorrected.attrs = cont.attrs
-xrcorrected.Intensity.data = corrected
-xrcorrected.Intensity.attrs['DetectorCorrected'] = True
-xrcorrected['multiplier'] = (('time'), multiplier)
-
-
-xrcorrected.to_netcdf(os.path.join(folder, '20171120_160356_3.5um_591.4_IVhdr_detectorcorrected.nc'))
-
 xr.open_dataset(os.path.join(folder, '20171120_160356_3.5um_591.4_IVhdr_detectorcorrected.nc'))['multiplier'].plot()
-
-

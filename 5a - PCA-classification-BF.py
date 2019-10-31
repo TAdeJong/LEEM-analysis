@@ -5,8 +5,8 @@
 #     text_representation:
 #       extension: .py
 #       format_name: light
-#       format_version: '1.3'
-#       jupytext_version: 0.8.6
+#       format_version: '1.4'
+#       jupytext_version: 1.2.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -26,11 +26,10 @@ from dask_ml.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.metrics import silhouette_samples, silhouette_score
-from dask.distributed import Client
+from dask.distributed import Client, LocalCluster
 import time
-
-from pyL5.lib.analysis.container import Container
-
+import os
+import xarray as xr
 
 from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 
@@ -48,7 +47,9 @@ bGreen = LinearSegmentedColormap.from_list('bGreen', ['black', toniceRGB([0,1,0]
 cmaps = [bRed, bGreen, bBlue]*2
 colors = [toniceRGB([1,0,0]), toniceRGB([0,1,0]), toniceRGB([0,0,1])]*2
 
-client = Client('localhost:8786')
+#cluster = LocalCluster(n_workers=3, threads_per_worker=4, memory_limit='10GB')
+client = Client('127.0.0.1:35775')
+client
 # -
 
 # ## Load the data
@@ -59,11 +60,12 @@ tstart = time.time()
 dimensions = 6
 coarsen = 1
 
-folder = './data/20171120_160356_3.5um_591.4_IVhdr'
-
+#folder = './data/20171120_160356_3.5um_591.4_IVhdr'
+folder = r'./data'
+name = '20171120_160356_3.5um_591.4_IVhdr'
 Erange = slice(62, 460)
 #Erange = slice(62, 160) # Alternative range to only show layer count differences
-dset = da.from_zarr(folder+'/newDriftCorrected.zarr')
+dset = da.from_zarr(os.path.join(folder, name + '_driftcorrected.zarr'))
 
 IVs = dset[Erange, 220:1140, 160:1050].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
 fullIVs = dset[:, 220:1140, 160:1050].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
@@ -73,10 +75,11 @@ IVs
 coarseIVs = IVs[:,::coarsen, ::coarsen].reshape((IVs.shape[0],-1)).T.persist()
 coarseIVs
 
-# Metadata
-cont = Container(folder+'.nlp')
-EGY = np.array(cont['EGYM'][Erange])
-multiplier = np.array(cont['multiplier'][Erange])
+# Get metadata from netCDF file for plotting
+xdata = xr.open_dataset(os.path.join(folder, name +'_detectorcorrected.nc'))
+EGY = xdata.Energy_set
+multiplier = xdata.multiplier
+plt.plot(EGY, multiplier)
 
 # ## Principal Component Analysis
 # To reduce the data to a reasonable number of dimensions, we use a pipeline of a standardscaler and PCA:
@@ -100,7 +103,7 @@ plt.legend(fontsize='large', scatterpoints=3)
 plt.tight_layout()
 plt.ylim([None,1])
 plt.savefig(f'scree_plot_BF2_{pipe_names}.pdf')
-scree.cumsum()
+f"{dimensions} PCA components explain {scree.sum():.4f} of the total variance"
 
 # Align signs with brightness in original pictures
 pipe_diffs = pipe.inverse_transform(np.eye(dimensions)).compute()
@@ -116,12 +119,14 @@ rIVs = pipe.transform(IVs.reshape(IVs.shape[0], -1).T).persist()
 # To visualize the dimension reduction, we calculate the spectra corresponding to the extrema of the components, as well as the spectra _occuring in the dataset_ with the extreme values of the components:
 
 # +
-argextrema = da.concatenate([rIVs[rIVs.argmin(axis=0),:], rIVs[rIVs.argmax(axis=0),:]])
-argextrema = pipe.inverse_transform(argextrema)/multiplier
+argextrema = da.concatenate([rIVs[rIVs.argmin(axis=0),:], 
+                             rIVs[rIVs.argmax(axis=0),:]])
+argextrema = pipe.inverse_transform(argextrema) / multiplier[Erange]
 argextrema = argextrema.reshape((2,6,-1))
 
-extrema = da.concatenate([da.diag(rIVs.min(axis=0)), da.diag(rIVs.max(axis=0))])
-extrema = pipe.inverse_transform(extrema)/multiplier
+extrema = da.concatenate([da.diag(rIVs.min(axis=0)), 
+                          da.diag(rIVs.max(axis=0))])
+extrema = pipe.inverse_transform(extrema) / multiplier[Erange]
 extrema = extrema.reshape((2,6,-1))
 
 argextrema, extrema = da.compute(argextrema, extrema)
@@ -135,10 +140,11 @@ print('Plotting data')
 for i in range(dimensions):
     axs[0,i].imshow(rIVs[:,i].reshape(IVs.shape[1:]).T, interpolation='none', cmap=cmaps[i])
     axs[0,i].set_title('PCA component {}'.format(i+1), fontsize='small')
-    axs[1,i].plot(EGY, argextrema[1][i], color=cmaps[i](1.0), linestyle=':')
-    axs[1,i].plot(EGY, argextrema[0][i], color=cmaps[i](0.0), linestyle=':')
-    axs[1,i].plot(EGY, extrema[1][i], color=cmaps[i](1.0), alpha=0.6)
-    axs[1,i].plot(EGY, extrema[0][i], color=cmaps[i](0.0), alpha=0.6)
+    E = EGY[Erange]
+    axs[1,i].plot(E, argextrema[1][i], color=cmaps[i](1.0), linestyle=':')
+    axs[1,i].plot(E, argextrema[0][i], color=cmaps[i](0.0), linestyle=':')
+    axs[1,i].plot(E, extrema[1][i], color=cmaps[i](1.0), alpha=0.6)
+    axs[1,i].plot(E, extrema[0][i], color=cmaps[i](0.0), alpha=0.6)
     axs[1,i].set_yscale('log')
     axs[1,i].set_xlabel('$E_0$ (eV)')
     axs[1,i].margins(x=0)
@@ -183,7 +189,7 @@ for n in klabels:
     cl_labels = clusterer.fit_predict(rIVs[::20,:kmeans_d])
     print(n, "fit_predicted")
     scores.append(silhouette_score(rIVs[::20,:kmeans_d], cl_labels))
-    print(n, scores[-1])
+    print(f"{n} clusters, score = {scores[-1]}")
 plt.plot(klabels, scores)
 plt.ylabel('Silhoutte score')
 plt.xlabel('$n_{clusters}$')
@@ -270,7 +276,7 @@ print("Time elapsed: {}".format(time.time()-tstart))
 meanIVs = da.compute(*meanIVs)
 print("Time elapsed: {}".format(time.time()-tstart))
 for i, meanIV in enumerate(meanIVs):
-    axs[3,1].plot(cont['EGYM'], (meanIV/cont['multiplier']), alpha=0.75)#, color=center_colors[i],)
+    axs[3,1].plot(xdata.Energy, (meanIV / multiplier), alpha=0.75)#, color=center_colors[i],)
 
 axs[3,1].set_yscale('log')
 axs[3,1].set_xlabel('Energy (eV)')
@@ -358,7 +364,7 @@ axs[0,1].imshow(clusteringimg.T,
                 **colorargs
                 )
 for i, meanIV in enumerate(meanIVs):
-    axs[1,1].plot(cont['EGYM'], (meanIV/cont['multiplier']), alpha=0.75)
+    axs[1,1].plot(xdata['Energy'], (meanIV / multiplier), alpha=0.75)
     
 axs[1,1].set_yscale('log')
 axs[1,1].set_xlabel('Energy (eV)')
@@ -371,5 +377,4 @@ plt.subplots_adjust(left=0.05)
 plt.savefig('BF_clustering3D.pdf', dpi=600)
 plt.show()
 # -
-
 

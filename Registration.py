@@ -11,7 +11,7 @@ from skimage import filters
 import numba
 
 def filter_block(block, sigma, mode='nearest'):
-    """Perform gaussian and sobel filtering on a block of images"""
+    """Perform Gaussian and Sobel filtering on a block of images"""
     #return np.stack([GSfilter(block[i], sigma, mode) for i in range(block.shape[0])])
     return np.stack([GSfilter(image, sigma, mode) for image in block])
 
@@ -159,37 +159,31 @@ def interp_shifts(coords, shifts, n=None):
     #shift = da.from_array(shift, chunks=(dE,1,1))
     return shifts_interp
 
-def shift_block(images, shifts, margins=(0,0)):
-    """Shift a block of images per image in the x,y plane by shifts[index].
-    Embed this in margins extra space"""
-    result = np.zeros((images.shape[0], 
-                       images.shape[1] + margins[0], 
-                       images.shape[2] + margins[1]))
-    for index in range(images.shape[0]): 
-        result[index, 
-               0:images.shape[1], 
-               0:images.shape[2]] = images[index]
-        result[index,...] = shift(result[index,...],
-                                  shift=shifts[index], 
-                                  order=1,
-                                  )
-    return result
+# def shift_block(images, shifts, margins=(0,0)):
+#     """Shift a block of images per image in the x,y plane by shifts[index].
+#     Embed this in margins extra space"""
+#     result = np.zeros((images.shape[0], 
+#                        images.shape[1] + margins[0], 
+#                        images.shape[2] + margins[1]))
+#     for index in range(images.shape[0]): 
+#         result[index, 
+#                0:images.shape[1], 
+#                0:images.shape[2]] = images[index]
+#         result[index,...] = shift(result[index,...],
+#                                   shift=shifts[index], 
+#                                   order=1,
+#                                   )
+#     return result
 
-#def plot_stack(images, n):
-#    """Plot the n-th image from a stack of n images.
-#    For interactive use with ipython widgets"""
-#    im = images[n, :, :].compute()
-#    plt.imshow(im.T, cmap='gray', vmax=im.mean()*5)
-#    plt.show()
+# def syn_shift_blocks(shiftsX, shiftsY, image):
+#     result = np.stack([image] * dE)
+#     for index in range(dE): 
+#         result[index,...] = shift(result[index,...],
+#               shift=(shiftsX[index,...],shiftsY[index,...]), 
+#               order=1,
+#               )
+#     return result
 
-def syn_shift_blocks(shiftsX, shiftsY, image):
-    result = np.stack([image] * dE)
-    for index in range(dE): 
-        result[index,...] = shift(result[index,...],
-              shift=(shiftsX[index,...],shiftsY[index,...]), 
-              order=1,
-              )
-    return result
 
 def only_filter(images, sigma=11, mode='nearest'):
     """Apply the filters.
