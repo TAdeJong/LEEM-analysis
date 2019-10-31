@@ -5,8 +5,8 @@
 #     text_representation:
 #       extension: .py
 #       format_name: light
-#       format_version: '1.3'
-#       jupytext_version: 0.8.6
+#       format_version: '1.4'
+#       jupytext_version: 1.2.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -21,16 +21,13 @@ from Registration import *
 import shutil
 import xarray as xr
 import time
-from dask.distributed import Client
+from dask.distributed import Client, LocalCluster
 import matplotlib.pyplot as plt
 
-# temporary imports
-from pyL5.lib.analysis.container import Container
-
-# Get the data defined, but not loaded as we are using dask here.
-folder = r'.\data\20171120_160356_3.5um_591.4_IVhdr'
-original = Container(folder + '/data.h5').getStack('CPcorrected').getDaskArray()
-
+folder = r'./data'
+name = '20171120_160356_3.5um_591.4_IVhdr'
+original = xr.open_dataset(os.path.join(folder, name + '_detectorcorrected.nc'), chunks={'time': 1})
+original = original.Intensity.data
 
 # Define a bunch of constants
 fftsize = 256 // 2
@@ -52,8 +49,10 @@ res
 
 # Before we can start, we connect to the dask-scheduler and upload the used functions
 
-client = Client('localhost:8786')
+cluster = LocalCluster(n_workers=2, threads_per_worker=10, memory_limit='15GB')
+client = Client(cluster)
 client.upload_file('Registration.py')
+client
 
 tstart = time.time()
 t = np.zeros((5,))

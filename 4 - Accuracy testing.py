@@ -23,12 +23,13 @@ import matplotlib.pyplot as plt
 import xarray as xr
 
 from scipy.ndimage.interpolation import shift
-from dask.distributed import Client
+from dask.distributed import Client, LocalCluster
 from Registration import *
 
-
-client = Client('localhost:8786')
+cluster = LocalCluster(n_workers=2, threads_per_worker=10, memory_limit='15GB')
+client = Client(cluster)
 client.upload_file('Registration.py')
+client
 # -
 
 fftsize=256*2 // 2
@@ -41,7 +42,7 @@ plt.colorbar();
 
 # The $x$ and $y$ coordinate are independent in the algorithm. We take advantage of this by testing two types of displacements at once: a parabolic displacement in the $x$-direction and a random one for $y$.
 
-length = 200
+length = 100
 dE = 10
 x = np.arange(length)
 xshifts = x**2/(4*length)
@@ -67,7 +68,7 @@ def shift_images(image, shifts):
 da_annulus = da.from_array(annulus, chunks='auto' )
 shifts = da.from_array(np.stack([xshifts, yshifts], axis=1), chunks=(dE,2))
 
-synthetic = shift_images(da_annulus, shifts)
+synthetic = shift_images(da_annulus, shifts) #.persist()
 
 
 # -
@@ -86,7 +87,7 @@ def only_filter(images, sigma=11, mode='nearest'):
 
 # Create the random noise to be added in different magnitudes to the data.
 da.random.seed(42)
-noise = da.random.normal(size=synthetic.shape, chunks=synthetic.chunks)
+noise = da.random.normal(size=synthetic.shape, chunks=synthetic.chunks) #.persist()
 
 # Create an xarray.DataArray to store the results
 As = np.arange(0., 4., 0.05)
@@ -99,7 +100,7 @@ res = xr.DataArray(np.zeros((len(As), len(sigmas), 2, len(ns))),
 
 for A in As:
     noisedata = synthetic + A * noise
-    noisedata = noisedata.persist()
+    #noisedata = noisedata.persist()
     for s in sigmas:
         if(res.loc[dict(s=s,A=A,direction='x')].mean() == 0):
             sobel = only_filter(noisedata, 
@@ -112,12 +113,12 @@ for A in As:
             coords, weightmatrix, DX, DY, row_mask = threshold_and_mask(0.0, Wc, Mc, coords=coords)
             dx, dy = calc_shift_vectors(DX, DY, weightmatrix, wpower=4)
             ddx, ddy = interp_shifts(coords, [dx,dy], length)
-            res.loc[dict(s=s,A=A,direction='x')] = ddx
-            res.loc[dict(s=s,A=A,direction='y')] = ddy
+            res.loc[dict(s=s, A=A, direction='x')] = ddx
+            res.loc[dict(s=s, A=A, direction='y')] = ddy
             print(f"A={A}, s={s} completed")
         else: 
             print(f"Skipping A={A}, s={s}")
-    res.to_netcdf('accuracy_results.nc')
+    res.to_netcdf('accuracy_results_testing.nc')
 
 # ## Plotting
 # Let's visualize the results! This produces Figure 8 of the paper.
@@ -204,4 +205,7 @@ axs[2].set_title("Mean error")
 axs[4].set_title("Optimal error spread")
     
 
-plt.savefig('simulation_error.pdf')
+#plt.savefig('simulation_error.pdf')
+# -
+
+
