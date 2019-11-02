@@ -12,4 +12,4 @@ For human readable diffs, each notebook is shadowed by a Python file using [jupy
 The code makes extensive use of [`dask`](https://dask.org/) for lazy and parallel computation, the N-D labeled arrays and datasets library [`xarray`](http://xarray.pydata.org/), as well as the usual components of the scipy stack such as `numpy`, `matplotlib` and `skimage`.
 
 ## Data
-The data will be available separately at (probably https://researchdata.4tu.nl/). The zeroth notebook facilitates easy download of all related data.
+The data will be available separately at https://researchdata.4tu.nl/. The zeroth notebook facilitates easy download of all related data.

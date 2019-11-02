@@ -23,6 +23,7 @@ import xarray as xr
 import time
 from dask.distributed import Client, LocalCluster
 import matplotlib.pyplot as plt
+import os
 
 folder = r'./data'
 name = '20171120_160356_3.5um_591.4_IVhdr'
@@ -37,15 +38,12 @@ fftsize = 256 // 2
 
 iters = np.arange(5)
 sigmas = [3, 7, 9, 11, 13, 17]
-#ns = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700]
-#ns = [100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700]
-#strides = np.arange(10,0,-1)
-strides = np.array([15, 20, 35, 50, 70])
+strides = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 35, 50, 70,])
 ts = [0,1,2,3,4]
 res = xr.DataArray(np.zeros((len(iters), len(sigmas), len(strides), len(ts))), 
              coords={'i':iters, 'sigma': sigmas, 'strides': strides, 't': ts}, 
              dims=['i','sigma', 'strides', 't'])
-res
+res.coords
 
 # Before we can start, we connect to the dask-scheduler and upload the used functions
 
@@ -61,7 +59,7 @@ for p, stride in enumerate(strides):
         if p == 0:
             break
         for i in iters:
-            t[0] = time.time()- tstart
+            t[0] = time.time() - tstart
             #start, stride, dE = 40, 1, 10
             start, stop, dE = 40, 740, 10
             #stop = start + n
@@ -94,16 +92,15 @@ for p, stride in enumerate(strides):
             res.loc[dict(i=i,sigma=sigma,strides=stride)] = t
             shutil.rmtree(r'tempresult.zarr')
             print(t, corrected.shape, weights.shape)
-    res.to_netcdf('benchmarkresult.nc')
+    res.to_netcdf(os.path.join(folder, 'benchmarkresult.nc'))
 
 # ## Plotting
-# Now we can plot the results using `xarray` plotting interface on the created datasets. First we do some cleaning up of the data and recombination:
+# We can plot the results of either the benchmark run above or the reference results. This is done using `xarray` plotting interface on the created datasets. First we do some cleaning up of the data and recombination:
+
+data = xr.open_dataarray(os.path.join(folder, 'benchmarkresult_reference.nc')) #remove _reference to view newly generated results
+data
 
 # +
-highdata = xr.open_dataarray('benchmarkresult_jac_strided_high_count.nc')
-lowdata = xr.open_dataarray('benchmarkresult_jac_strided_low_count.nc')
-data = xr.concat([lowdata, highdata], dim='strides')
-
 # We are interested in the times each individual step took, 
 # instead of the time upto that step which is saved, so take a diff
 
@@ -140,7 +137,7 @@ facetgrid.axes[0,1].set_title('Phase:\nLeast Squares')
 facetgrid.axes[0,2].set_title('Phase:\nShift & write')
 facetgrid.axes[0,3].set_title('Total')
 plt.subplots_adjust(top=0.8, bottom=0.18, left=0.08, wspace=0.1)
-plt.savefig('timebench.pdf')
+#plt.savefig('timebench.pdf')
 # -
 
 

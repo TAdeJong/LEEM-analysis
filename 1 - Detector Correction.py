@@ -23,6 +23,7 @@ from scipy.optimize import least_squares
 import xarray as xr
 import os
 import dask.array as da
+from IPython.display import Markdown
 
 # We always grab a part of the center of the image for calibration
 radius = 100
@@ -34,7 +35,6 @@ DC_dat
 DC = DC_dat['Intensity'].mean(dim='time')
 
 DCval = DC[(640-radius):(640+radius), (512-radius):(512+radius)].mean()
-DC
 # -
 
 # ## Calibration of $G(V_{MCP})$
@@ -78,7 +78,7 @@ Iorigs = np.stack(Iorigs)
 
 # As described in the paper, we fit a function of the following form:
 #
-# $G(V_\text{MCP}) = A_i\exp\left(\sum_{k=0}^5 c_k {V_\text{MCP}}^{2k+1}\right)$
+# $G(V_\text{MCP}) = A_i\exp\left(\sum_{k=0}^9 c_k {V_\text{MCP}}^{2k+1}\right)$
 
 # +
 # Fitting and error function definitions
@@ -111,9 +111,9 @@ def err_func(params, CP, I):
 fullres = least_squares(err_func, [1,1,1,1, 0,0,0,0, 0,0,0,0], args=(CPvals, Ivals), 
                          max_nfev=1000000)
 res = fullres['x']
-fullres['message']
+print(fullres['message'])
+Markdown('$'+'$  \n$'.join(['c_{} = {:.5f}'.format(k, res[3+k]) for k in range(len(res[3:]))])+'$  \n$\sum_{k=0}'+'^{}c_k = {:.5f}$'.format(len(res[3:]), np.sum(res[3:])))
 
-res[3:], np.sum(res[3:])
 
 def multiplier_from_CP(V_MCP):
     """Multiplier based on MCP voltage V_MCP (in kV)
@@ -159,11 +159,11 @@ plt.savefig(f'Channelplate_calibration_test_{len(res)}.pdf')
 
 # ## Flatfielding 
 
-cont = xr.open_dataset(os.path.join(folder, '20171120_160356_3.5um_591.4_IVhdr.nc'), chunks={'time': 5})
-cont.Intensity.attrs
+dataname = '20171120_160356_3.5um_591.4_IVhdr'
+dataset = xr.open_dataset(os.path.join(folder, dataname + '.nc'), chunks={'time': 5})
+data = dataset['Intensity'].data
+dataset
 
-data = cont['Intensity'].data
-data
 
 @da.as_gufunc(signature="(i,j), (i,j), (i,j) ->(i,j),()", output_dtypes=(np.uint16, float))
 def correctImages(image, darkCount, normFF):
@@ -176,7 +176,7 @@ def correctImages(image, darkCount, normFF):
     Corr_image = Corr_image.astype(np.uint16)
     return Corr_image, np.atleast_1d(multiplier.squeeze())
 
-G_MCP = multiplier_from_CP(cont["MCP_bias"].compute())
+G_MCP = multiplier_from_CP(dataset["MCP_bias"].compute())
 # Use the mirror mode, where all electrons are reflected, as flat field
 FF = (data[:32].mean(axis=0) - DC)
 # Do not scale for pixels outside the channelplate
@@ -192,7 +192,7 @@ CPcorimage = corrected[77] / multiplier[77]
 fig, axs = plt.subplots(2,2, constrained_layout=True, figsize=[8, 4.9])
 im = axs[0,0].imshow(DC.T/16., interpolation='none')
 fig.colorbar(im, ax=axs[0,0], label='Intensity (mean CCD counts)', pad=0)
-im = axs[0,1].imshow(FF.T, interpolation='none')
+im = axs[0,1].imshow((data[:32].mean(axis=0) - DC).T, interpolation='none')
 fig.colorbar(im, ax=axs[0,1], label='Intensity (CCD counts)')
 im = axs[1,0].imshow(rawimage.compute().T, cmap='gray', interpolation='none')
 fig.colorbar(im, ax=axs[1,0], label='Intensity (CCD counts)')
@@ -233,28 +233,29 @@ plt.savefig('DC_and_Flatfield2.pdf', dpi=300)
 #
 # Finally, we save both the corrected images and the multiplier to a new netCDF dataset via xarray
 
-xrcorrected = cont.copy()
+xrcorrected = dataset.copy()
 xrcorrected.Intensity.data = corrected
 xrcorrected.Intensity.attrs['DetectorCorrected'] = 'True'
 xrcorrected['multiplier'] = (('time'), multiplier)
-xrcorrected.to_netcdf(os.path.join(folder, '20171120_160356_3.5um_591.4_IVhdr_detectorcorrected.nc'))
+xrcorrected.to_netcdf(os.path.join(folder, dataname + '_detectorcorrected.nc'))
 xrcorrected
 
 # ## Comparison of results
 # Finally, we visualize the effect of active tuning of the gain by plotting a spectrum measured with regular settings and one with adaptive gain.
 
-#Ehdrold, Ihdrold = np.genfromtxt(os.path.join(folder,'20190509_142203_3.5um_561.5_IVhdrBILAYER.csv'), unpack=True)
-Ehdr, Ihdr = np.genfromtxt(os.path.join(folder,'20190509_142203_3.5um_561.5_IVhdrBILAYER_.csv'), unpack=True)
-E, I = np.genfromtxt(os.path.join(folder,'20190509_155656_3.5um_562.1_IVBILAYER.csv'), unpack=True)
-CP = np.genfromtxt(os.path.join(folder,'20190509_155656_3.5um_562.1_IV_CHANNELPLATE.txt'))
-CPhdr = np.genfromtxt(os.path.join(folder,'20190509_142203_3.5um_561.5_IVhdr_CHANNELPLATE.txt'))
+# +
+Ehdr, Ihdr = np.genfromtxt(os.path.join(folder, '20190509_142203_3.5um_561.5_IVhdrBILAYER_.csv'), unpack=True)
+E, I = np.genfromtxt(os.path.join(folder, '20190509_155656_3.5um_562.1_IVBILAYER.csv'), unpack=True)
+CP = np.genfromtxt(os.path.join(folder, '20190509_155656_3.5um_562.1_IV_CHANNELPLATE.txt'))
+CPhdr = np.genfromtxt(os.path.join(folder, '20190509_142203_3.5um_561.5_IVhdr_CHANNELPLATE.txt'))
+
 fig, axs = plt.subplots(nrows=2, gridspec_kw={'height_ratios': [0.8,2]}, sharex=True, figsize=[4,3])
 axs[0].plot(Ehdr, CPhdr)
 axs[0].plot(E, CP)
 axs[0].margins(x=0)
 axs[0].set_ylabel('$V_{MCP}\ (kV)$')
+
 axs[1].semilogy(Ehdr,Ihdr, label='HDR corrected')
-#axs[1].semilogy(Ehdrold, Ihdrold, label='HDR corrected old')
 axs[1].semilogy(E,I, label='Constant $V_{mcp}$, corrected')
 axs[1].margins(x=0)
 axs[1].set_xlabel('$E_0\ (eV)$')
@@ -262,5 +263,3 @@ axs[1].set_ylabel('Reflectivity')
 axs[1].legend()
 plt.tight_layout(h_pad=0.0, pad=0)
 plt.savefig('HDRcomparison.pdf')
-
-xr.open_dataset(os.path.join(folder, '20171120_160356_3.5um_591.4_IVhdr_detectorcorrected.nc'))['multiplier'].plot()
