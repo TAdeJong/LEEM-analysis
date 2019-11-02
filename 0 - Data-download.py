@@ -23,6 +23,6 @@ import os
 if not os.path.exists('./data'):
     os.mkdir('./data')
 
-# The data will become available in a temporary download form soon.
+# The data is available in a temporary download from https://stack.tadejong.nl/s/VyMhaeFB53ubzsD. Choose "Download Map" in top right and extract the contents to the data folder, or pick individual files.
 
 
