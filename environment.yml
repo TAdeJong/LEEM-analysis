@@ -1,0 +1,20 @@
+name: LEEM-analysis
+channels:
+  - defaults
+dependencies:
+  - distributed
+  - netcdf4
+  - zarr
+  - numpy
+  - ipywidgets
+  - dask-ml
+  - matplotlib
+  - scikit-image
+  - xarray
+  - scipy
+  - numba
+  - dask
+  - scikit-learn
+  - jupytext
+prefix: /home/tobias/anaconda3/envs/LEEM-analysis
+

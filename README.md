@@ -13,8 +13,8 @@ The code makes extensive use of [`dask`](https://dask.org/) for lazy and paralle
 
 ## Getting started
 * Git clone or download this repository.
-* Create a Python environment with the necessary packages, as documented in [requirements.txt](requirements.txt).
-* Start a Jupyter notebook or Jupyter lab and have a look at the notebooks
+* Create a Python environment with the necessary packages, either from [requirements.txt](requirements.txt) or (for `conda` users) from [environment.yml](environment.yml).
+* Activate the environment and start a Jupyter notebook and have a look at the notebooks
 
 ## Data
 The data will be available separately at https://researchdata.4tu.nl/. The [zeroth notebook](0_-_Data-download.ipynb) facilitates easy download of all related data.
