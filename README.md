@@ -17,4 +17,4 @@ The code makes extensive use of [`dask`](https://dask.org/) for lazy and paralle
 * Activate the environment and start a Jupyter notebook and have a look at the notebooks
 
 ## Data
-The data will be available separately at https://researchdata.4tu.nl/. The [zeroth notebook](0_-_Data-download.ipynb) facilitates easy download of all related data.
+The data will be available separately at https://researchdata.4tu.nl/. The [zeroth notebook](0%20-%20Data-download.ipynb) facilitates easy download of all related data.
