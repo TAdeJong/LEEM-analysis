@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.4'
-#       jupytext_version: 1.2.1
+#       jupytext_version: 1.2.4
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -43,7 +43,7 @@ from Registration import *
 # -
 
 plt.rcParams["figure.figsize"] = [12., 8.]
-cluster = LocalCluster(n_workers=2, threads_per_worker=5, memory_limit='15GB')
+cluster = LocalCluster(n_workers=1, threads_per_worker=8)
 client = Client(cluster)
 client
 
@@ -62,9 +62,11 @@ def plot_stack(images, n, grid=False):
 
 # +
 folder = r'./data'
-name = '20171120_160356_3.5um_591.4_IVhdr'
-start, stop, stride, dE = 40, -1, 1, 10 #BF
-#start, stop, stride, dE = 0, -1, 1, 10 #DF
+#name = '20171120_160356_3.5um_591.4_IVhdr'
+#start, stop, stride, dE = 40, -1, 1, 10 #BF
+
+name = '20171120_215555_3.5um_583.1_IVhdr_DF2'
+start, stop, stride, dE = 0, -1, 1, 10 #DF
 Eslice = slice(start, stop, stride)
 
 # Grab a window of 2*fftsize around the center of the picture

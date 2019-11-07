@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.4'
-#       jupytext_version: 1.2.1
+#       jupytext_version: 1.2.4
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -160,7 +160,9 @@ plt.savefig(f'Channelplate_calibration_test_{len(res)}.pdf')
 # ## Flatfielding 
 
 dataname = '20171120_160356_3.5um_591.4_IVhdr'
+DFdataname = '20171120_215555_3.5um_583.1_IVhdr_DF2'
 dataset = xr.open_dataset(os.path.join(folder, dataname + '.nc'), chunks={'time': 5})
+DFdataset = xr.open_dataset(os.path.join(folder, DFdataname + '.nc'), chunks={'time': 5})
 data = dataset['Intensity'].data
 dataset
 
@@ -238,6 +240,19 @@ xrcorrected.Intensity.data = corrected
 xrcorrected.Intensity.attrs['DetectorCorrected'] = 'True'
 xrcorrected['multiplier'] = (('time'), multiplier)
 xrcorrected.to_netcdf(os.path.join(folder, dataname + '_detectorcorrected.nc'))
+xrcorrected
+
+# ### Dark Field dataset
+# We also correct the Dark Field dataset, using the mirror mode from the Bright Field dataset as Flat Field
+
+DFcorrected, DFmultiplier = correctImages(DFdataset['Intensity'].data, DC, FF / G_MCP[:32].mean())
+DFmultiplier *= multiplier_from_CP(DFdataset["MCP_bias"].compute())
+
+xrcorrected = DFdataset.copy()
+xrcorrected.Intensity.data = DFcorrected
+xrcorrected.Intensity.attrs['DetectorCorrected'] = 'True'
+xrcorrected['multiplier'] = (('time'), DFmultiplier)
+xrcorrected.to_netcdf(os.path.join(folder, DFdataname + '_detectorcorrected.nc'))
 xrcorrected
 
 # ## Comparison of results
