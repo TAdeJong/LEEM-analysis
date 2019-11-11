@@ -13,6 +13,9 @@
 #     name: python3
 # ---
 
+# # PCA classification: Dark Field data
+# Here, we will use Principal Component Analysis to reduce the dimensionality of the measured spectra, to visualize the spectra and to cluster the data, automatically assigning labels to different areas. First some preliminaries:
+
 # +
 import numpy as np
 import matplotlib
@@ -25,6 +28,8 @@ from sklearn.preprocessing import Normalizer
 from sklearn.pipeline import Pipeline, make_pipeline
 from dask.distributed import Client
 import time
+import os
+import xarray as xr
 
 from pyL5.lib.analysis.container import Container
 
@@ -43,6 +48,9 @@ bGreen = LinearSegmentedColormap.from_list('bGreen', ['black', toniceRGB([0,1,0]
 cmaps = [bRed, bGreen, bBlue]*2
 colors = [toniceRGB([1,0,0]), toniceRGB([0,1,0]), toniceRGB([0,0,1])]*2
 
+client = Client('tcp://127.0.0.1:62371')
+client
+
 
 # -
 
@@ -51,18 +59,25 @@ dimensions = 6
 coarsen = 1
 
 # +
-folder = './data/20171120_215555_3.5um_583.1_IVhdr_DF2'
+folder = './data'
+name = '20171120_215555_3.5um_583.1_IVhdr_DF2'
 
 # Clip out anything before mirror mode and a bit more because of image distortion
 Erange = slice(100, 410)
-dset = da.from_zarr(folder+r'\newDriftcorrected.zarr')
+x_slice = slice(442, 1380)
+y_slice = slice(92, 960)
+dset = da.from_zarr(os.path.join(folder, name + '_driftcorrected.zarr'))
 
-IVs = dset[Erange, 442:1380, 92:960].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
-fullIVs = dset[:, 442:1380, 92:960].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
-cont = Container(folder+'.nlp')
-EGY = np.array(cont['EGYM'][Erange])
-multiplier = np.array(cont['multiplier'][Erange])
+IVs = dset[Erange, x_slice, y_slice].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
+fullIVs = dset[:, x_slice, y_slice].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
+IVs
 # -
+
+# Get metadata from netCDF file for plotting
+xdata = xr.open_dataset(os.path.join(folder, name +'_detectorcorrected.nc'))
+EGY = xdata.Energy_set
+multiplier = xdata.multiplier
+plt.plot(EGY, multiplier)
 
 coarseIVs = IVs[:,::coarsen, ::coarsen].reshape((IVs.shape[0],-1)).T.persist()
 pca = PCA(n_components=dimensions, whiten=True, random_state=4)
@@ -72,7 +87,7 @@ pipe_names
 
 pipe.fit(coarseIVs)
 
-plt.figure(figsize=[3.5,3.5])
+plt.figure(figsize=[3.5 ,3.5])
 scree = np.concatenate([[0], pipe.named_steps['pca'].explained_variance_ratio_])
 plt.scatter(np.arange(dimensions)+1, scree[1:], label='relative', facecolors='none', edgecolors=colors, linewidth=2)
 plt.scatter(np.arange(dimensions+1), np.cumsum(scree), marker='+', label='cumulative', color='black', linewidth=2)
@@ -83,7 +98,7 @@ plt.legend(fontsize='large', scatterpoints=3)
 plt.tight_layout()
 plt.ylim([None,1])
 plt.savefig(f'scree_plot_DF_{pipe_names}.pdf')
-scree.cumsum()
+f"{dimensions} PCA components explain {scree.sum():.4f} of the total variance"
 
 # Align signs with brightness in original pictures
 pipe_diffs = pipe.inverse_transform(3*np.eye(6)).compute()
@@ -95,31 +110,30 @@ print('Transforming PCA')
 rIVs = pipe.transform(IVs.reshape(IVs.shape[0], -1).T).persist()
 
 # +
-argextrema = da.concatenate([rIVs[rIVs.argmin(axis=0),:], rIVs[rIVs.argmax(axis=0),:]])
-argextrema = pipe.inverse_transform(argextrema)/multiplier
-argextrema = argextrema.reshape((2,6,-1))
+argextrema = da.concatenate([rIVs[rIVs.argmin(axis=0), :], 
+                             rIVs[rIVs.argmax(axis=0), :]])
+argextrema = pipe.inverse_transform(argextrema) / multiplier[Erange]
+argextrema = argextrema.reshape((2, 6, -1))
 
-extrema = da.concatenate([da.diag(rIVs.min(axis=0)), da.diag(rIVs.max(axis=0))])
-extrema = pipe.inverse_transform(extrema)/multiplier
-extrema = extrema.reshape((2,6,-1))
+extrema = da.concatenate([da.diag(rIVs.min(axis=0)), 
+                          da.diag(rIVs.max(axis=0))])
+extrema = pipe.inverse_transform(extrema) / multiplier[Erange]
+extrema = extrema.reshape((2, 6, -1))
+
+argextrema, extrema = da.compute(argextrema, extrema)
 # -
 
-print('Computing extrema')
-argextrema, extrema = da.compute(argextrema, extrema)
-
-# +
-fig,axs = plt.subplots(2, dimensions, figsize=[10,3.5],
+fig,axs = plt.subplots(2, dimensions, figsize=[10, 3.5],
                       sharex='row', sharey='row',
                       constrained_layout=True)
-print('Plotting data')
-
+E = EGY[Erange]
 for i in range(dimensions):
     axs[0,i].imshow(rIVs[:,i].reshape(IVs.shape[1:]).T, interpolation='none', cmap=cmaps[i])
     axs[0,i].set_title('PCA component {}'.format(i+1), fontsize='small')
-    axs[1,i].plot(EGY, argextrema[1][i], color=cmaps[i](1.0))#, linestyle=':')
-    axs[1,i].plot(EGY, argextrema[0][i], color=cmaps[i](0.0))#, linestyle=':')
-    #axs[1,i].plot(EGY, extrema[1][i], color=cmaps[i](1.0), alpha=0.6)
-    #axs[1,i].plot(EGY, extrema[0][i], color=cmaps[i](0.0), alpha=0.6)
+    axs[1,i].plot(E, argextrema[1][i], color=cmaps[i](1.0), linestyle=':')
+    axs[1,i].plot(E, argextrema[0][i], color=cmaps[i](0.0), linestyle=':')
+    axs[1,i].plot(E, extrema[1][i], color=cmaps[i](1.0), alpha=0.6)
+    axs[1,i].plot(E, extrema[0][i], color=cmaps[i](0.0), alpha=0.6)
     axs[1,i].set_yscale('log')
     axs[1,i].set_xlabel('$E_0$ (eV)')
     axs[1,i].margins(x=0)
@@ -142,8 +156,10 @@ ax2.set_title('DF PCA component 4 to 6')
 plt.savefig(f'DF_visualization_{pipe_names}.pdf')
 # -
 
-rIVs = rIVs.compute()
+# ## Clustering: $k$-means
+# To assign labels to different spectra, we cluster using a standard unsupervised machine learning algorithm: $k$-means:
 
+rIVs = rIVs.compute()
 kmeans_d = 4
 
 from sklearn.metrics import silhouette_samples, silhouette_score
@@ -154,13 +170,16 @@ for n in klabels:
     cl_labels = clusterer.fit_predict(rIVs[::20,:kmeans_d])
     print(n, "fit_predicted")
     scores.append(silhouette_score(rIVs[::20,:kmeans_d], cl_labels))
-    print(n, scores[-1])
+    print(f"{n} clusters, score = {scores[-1]}")
 plt.plot(klabels, scores)
+plt.ylabel('Silhoutte score')
+plt.xlabel('$n_{clusters}$')
 
-# +
 print('Performing clustering via KMeans', rIVs[:,:kmeans_d].shape)
 kmeans = KMeans(n_clusters=8, random_state=10, n_jobs=-1).fit(rIVs[:,:kmeans_d])
 clustering = kmeans.predict(rIVs[:,:kmeans_d])
+
+# For visualization of curves corresponding to clusters, we grab the full spectra, filter out points where the spectrum was not measured due to drift and calculate the mean per image per spectrum.
 
 validIVs = da.where(fullIVs == 0, np.nan, fullIVs).reshape((fullIVs.shape[0],-1))
 meanIVs = [da.nanmean(validIVs[:,clustering == index], axis=1) 
@@ -187,10 +206,14 @@ color = toniceRGB(color)
 newcmap = ListedColormap(center_colors)
 
 colorargs = {'cmap': newcmap, 'vmin': 0, 'vmax': 8}
-axs[0,0].scatter(rIVs[::coarse_2d,0], rIVs[::coarse_2d,1], c=color, s=0.2, alpha=0.2,
+axs[0,0].scatter(rIVs[::coarse_2d, 0], 
+                 rIVs[::coarse_2d, 1], 
+                 c=color, s=0.2, alpha=0.2,
                  **colorargs, rasterized=True,
                  )
-axs[0,1].scatter(rIVs[::coarse_2d,0], rIVs[::coarse_2d,2], c=color, s=0.2, alpha=0.2,
+axs[0,1].scatter(rIVs[::coarse_2d, 0], 
+                 rIVs[::coarse_2d, 2], 
+                 c=color, s=0.2, alpha=0.2,
                  **colorargs, rasterized=True,
                  )
 
@@ -239,7 +262,7 @@ print("Time elapsed: {}".format(time.time()-tstart))
 meanIVs = da.compute(*meanIVs)
 print("Time elapsed: {}".format(time.time()-tstart))
 for i,meanIV in enumerate(meanIVs):
-    axs[3,1].plot(cont['EGYM'], (meanIV/cont['multiplier']),) # color=center_colors[i], alpha=0.75)
+    axs[3,1].plot(xdata.Energy, (meanIV / multiplier),) # color=center_colors[i], alpha=0.75)
 
 axs[3,1].set_yscale('log')
 axs[3,1].set_xlabel('Energy (eV)')
@@ -292,7 +315,7 @@ axs[0].imshow(clusteringimg.T,
                 )
 
 for i,meanIV in enumerate(meanIVs):
-    axs[1].plot(cont['EGYM'], (meanIV/cont['multiplier']),) # color=center_colors[i], alpha=0.75)
+    axs[1].plot(xdata.Energy, (meanIV / multiplier),) # color=center_colors[i], alpha=0.75)
 
 axs[1].set_yscale('log')
 axs[1].set_xlabel('Energy (eV)')

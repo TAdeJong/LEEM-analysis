@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.4'
-#       jupytext_version: 1.2.1
+#       jupytext_version: 1.2.4
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -53,22 +53,23 @@ client
 # -
 
 # ## Load the data
-# We optionally coarsen the data by a factor `coarsen`$^2$ to speed up the processing
+# We optionally coarsen the data by a factor `coarsen**2` to speed up the processing
 
 # +
 tstart = time.time()
 dimensions = 6
 coarsen = 1
 
-#folder = './data/20171120_160356_3.5um_591.4_IVhdr'
 folder = r'./data'
 name = '20171120_160356_3.5um_591.4_IVhdr'
 Erange = slice(62, 460)
 #Erange = slice(62, 160) # Alternative range to only show layer count differences
+x_slice = slice(220, 1140)
+y_slice = slice(160, 1050)
 dset = da.from_zarr(os.path.join(folder, name + '_driftcorrected.zarr'))
 
-IVs = dset[Erange, 220:1140, 160:1050].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
-fullIVs = dset[:, 220:1140, 160:1050].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
+IVs = dset[Erange, x_slice, y_slice].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
+fullIVs = dset[:, x_slice, y_slice].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
 IVs
 # -
 
@@ -92,7 +93,7 @@ pipe.fit(coarseIVs)
 
 # To inspect what is a reasonable number of dimensions to reduce to, we create a _scree_ plot:
 
-plt.figure(figsize=[3.5,3.5])
+plt.figure(figsize=[3.5, 3.5])
 scree = np.concatenate([[0], pipe.named_steps['pca'].explained_variance_ratio_])
 plt.scatter(np.arange(0,dimensions)+1, scree[1:], label='relative', facecolors='none', edgecolors=colors, linewidth=2)
 plt.scatter(np.arange(dimensions+1), np.cumsum(scree), marker='+', label='cumulative', color='black', linewidth=2)
@@ -102,10 +103,12 @@ plt.axhline(0, color='black', alpha=0.5)
 plt.legend(fontsize='large', scatterpoints=3)
 plt.tight_layout()
 plt.ylim([None,1])
-plt.savefig(f'scree_plot_BF2_{pipe_names}.pdf')
+plt.savefig(f'scree_plot_BF_{pipe_names}.pdf')
 f"{dimensions} PCA components explain {scree.sum():.4f} of the total variance"
 
-# Align signs with brightness in original pictures
+# To make the visualization reproducible, the degeneracy of the sign of the PCA components needs to be lifted. Here, we align the signs such that positive vector corresponds to being brighter in the majority of the images.
+# After this we can transform all original data to the reduced number of dimensions
+
 pipe_diffs = pipe.inverse_transform(np.eye(dimensions)).compute()
 signs = np.sign(np.nanmean((np.log(pipe_diffs) - 
                             np.log(pipe.named_steps['standardscaler'].mean_)),
@@ -119,28 +122,26 @@ rIVs = pipe.transform(IVs.reshape(IVs.shape[0], -1).T).persist()
 # To visualize the dimension reduction, we calculate the spectra corresponding to the extrema of the components, as well as the spectra _occuring in the dataset_ with the extreme values of the components:
 
 # +
-argextrema = da.concatenate([rIVs[rIVs.argmin(axis=0),:], 
-                             rIVs[rIVs.argmax(axis=0),:]])
+argextrema = da.concatenate([rIVs[rIVs.argmin(axis=0), :], 
+                             rIVs[rIVs.argmax(axis=0), :]])
 argextrema = pipe.inverse_transform(argextrema) / multiplier[Erange]
-argextrema = argextrema.reshape((2,6,-1))
+argextrema = argextrema.reshape((2, 6, -1))
 
 extrema = da.concatenate([da.diag(rIVs.min(axis=0)), 
                           da.diag(rIVs.max(axis=0))])
 extrema = pipe.inverse_transform(extrema) / multiplier[Erange]
-extrema = extrema.reshape((2,6,-1))
+extrema = extrema.reshape((2, 6, -1))
 
 argextrema, extrema = da.compute(argextrema, extrema)
+# -
 
-# +
-fig,axs = plt.subplots(2, dimensions, figsize=[10,3.5],
+fig,axs = plt.subplots(2, dimensions, figsize=[10, 3.5],
                       sharex='row', sharey='row',
                       constrained_layout=True)
-print('Plotting data')
-
+E = EGY[Erange]
 for i in range(dimensions):
     axs[0,i].imshow(rIVs[:,i].reshape(IVs.shape[1:]).T, interpolation='none', cmap=cmaps[i])
     axs[0,i].set_title('PCA component {}'.format(i+1), fontsize='small')
-    E = EGY[Erange]
     axs[1,i].plot(E, argextrema[1][i], color=cmaps[i](1.0), linestyle=':')
     axs[1,i].plot(E, argextrema[0][i], color=cmaps[i](0.0), linestyle=':')
     axs[1,i].plot(E, extrema[1][i], color=cmaps[i](1.0), alpha=0.6)
@@ -151,7 +152,6 @@ for i in range(dimensions):
 axs[1,0].set_ylabel('Intensity')
 #plt.tight_layout()
 plt.savefig(f'BF_PCAcomponents_{pipe_names}.pdf')
-# -
 
 # ## Visualization
 #
@@ -182,6 +182,7 @@ kmeans_d = 6
 
 # Optionally, calculate the silhouette score for different numbers of clusters and dimensions
 # to find an indication of a good choice of parameters
+# See https://scikit-learn.org/stable/auto_examples/cluster/plot_kmeans_silhouette_analysis.html
 scores = []
 klabels = range(4, 11)
 for n in klabels:
@@ -225,10 +226,14 @@ color = toniceRGB(color)
 newcmap = ListedColormap(center_colors)
 
 colorargs = {'cmap': newcmap, 'vmin': 0, 'vmax': kmeans.n_clusters}
-axs[0,0].scatter(rIVs[::coarse_2d,0], rIVs[::coarse_2d,1], c=color, s=0.2, alpha=0.2,
+axs[0,0].scatter(rIVs[::coarse_2d, 0], 
+                 rIVs[::coarse_2d, 1], 
+                 c=color, s=0.2, alpha=0.2,
                  **colorargs, rasterized=True,
                  )
-axs[0,1].scatter(rIVs[::coarse_2d,0], rIVs[::coarse_2d,2], c=color, s=0.2, alpha=0.2,
+axs[0,1].scatter(rIVs[::coarse_2d, 0], 
+                 rIVs[::coarse_2d, 2], 
+                 c=color, s=0.2, alpha=0.2,
                  **colorargs, rasterized=True,
                  )
 
