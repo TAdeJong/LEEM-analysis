@@ -13,10 +13,11 @@
 #     name: python3
 # ---
 
-# # Detector Correction
+# # 1 - Detector Correction
 #
 # In this first notebook, the effects of correcting for the artefacts in images caused by the detector system are explored. The relevant detector system consists of a microchannel plate (MCP) for electron amplification, a fluorescent screen to convert to photons and a CCD camera. Calibration of the gain vs MCP bias voltage, and subtraction of the dark current, followed by [flat fielding](https://en.wikipedia.org/wiki/Flat-field_correction), compensates artefacts and allows for conversion to true reflectivity spectra.
 
+# +
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import least_squares
@@ -25,13 +26,19 @@ import os
 import dask.array as da
 from IPython.display import Markdown
 
-# We always grab a part of the center of the image for calibration
-radius = 100
+SAVEFIG = False
+# -
+
+# ## Dark count
+# First we open the dark count dataset and extract both a mean dark count _image_ as well as a mean dark count _value.
+
 folder = './data'
 DC_dat =  xr.open_dataset(os.path.join(folder, '20171205_115846_0.66um_475.8_DC.nc'))
 DC_dat
 
 # +
+# We always grab a part of the center of the image for calibration
+radius = 100
 DC = DC_dat['Intensity'].mean(dim='time')
 
 DCval = DC[(640-radius):(640+radius), (512-radius):(512+radius)].mean()
@@ -79,6 +86,8 @@ Iorigs = np.stack(Iorigs)
 # As described in the paper, we fit a function of the following form:
 #
 # $G(V_\text{MCP}) = A_i\exp\left(\sum_{k=0}^9 c_k {V_\text{MCP}}^{2k+1}\right)$
+#
+# As initial guess we will assume 3 equal amplitudes, a non-zero linear components and zero for the higher order terms
 
 # +
 # Fitting and error function definitions
@@ -108,7 +117,8 @@ def err_func(params, CP, I):
     return (np.log(fit_func(CP, *params)) - np.log(I)).ravel()
 # -
 
-fullres = least_squares(err_func, [1,1,1,1, 0,0,0,0, 0,0,0,0], args=(CPvals, Ivals), 
+initial_params = [1,1,1, 1,0,0,0,0,0,0,0,0]  # 3 amplitudes and linear exponent non-zero
+fullres = least_squares(err_func, initial_params, args=(CPvals, Ivals), 
                          max_nfev=1000000)
 res = fullres['x']
 print(fullres['message'])
@@ -154,10 +164,12 @@ for ax in [axs[1], axs[3]]:
 for ax in axs[:2]:
     ax.xaxis.set_label_position("top")
     ax.tick_params(axis='x', labeltop=True, labelbottom=False)
-plt.savefig(f'Channelplate_calibration_test_{len(res)}.pdf')
+if SAVEFIG:
+    plt.savefig(f'Channelplate_calibration_test_{len(res)}.pdf')
 # -
 
 # ## Flatfielding 
+# First we load a dataset, then we will use `dask` and `numpy`'s `gufunc` to define a function `correctImages()` that performs the detector correction and apply it. Using `dask` has the benefit of streaming and parallelizing the operation without large additional programming effort.
 
 dataname = '20171120_160356_3.5um_591.4_IVhdr'
 DFdataname = '20171120_215555_3.5um_583.1_IVhdr_DF2'
@@ -168,23 +180,31 @@ dataset
 
 
 @da.as_gufunc(signature="(i,j), (i,j), (i,j) ->(i,j),()", output_dtypes=(np.uint16, float))
-def correctImages(image, darkCount, normFF):
+def correctImages(image, darkCount, FF):
+    """Using a darkCount and a Flatfield image FF, perform all
+    detector corrections, scale the image to use the full bitrange
+    of 16 bits and return the needed multiplier and resulting image(s).
+    """
     Corr_image = image.astype(np.int32) - darkCount
     # Set negative values to 0
     np.clip(Corr_image, 0, 2**16 - 1, out=Corr_image)
-    Corr_image = (Corr_image / normFF).astype(np.float64)
+    Corr_image = (Corr_image / FF).astype(np.float64)
     multiplier = (2**16 - 1.) / Corr_image.max(axis=(-2, -1), keepdims=True)
     Corr_image = Corr_image * multiplier
     Corr_image = Corr_image.astype(np.uint16)
     return Corr_image, np.atleast_1d(multiplier.squeeze())
 
+# +
 G_MCP = multiplier_from_CP(dataset["MCP_bias"].compute())
+
 # Use the mirror mode, where all electrons are reflected, as flat field
 FF = (data[:32].mean(axis=0) - DC)
+
 # Do not scale for pixels outside the channelplate
 FF = da.where(FF > 0.1*FF.max(), FF, FF.max())
 plt.imshow(FF.compute().T, cmap='gray')
 plt.colorbar()
+# -
 
 corrected, multiplier = correctImages(data, DC, FF / G_MCP[:32].mean())
 multiplier *= G_MCP
@@ -208,7 +228,8 @@ for ax in axs.flatten()[1:]:
             arrowprops=dict(facecolor='red', shrink=0.1),
             horizontalalignment='right', verticalalignment='top',
             )
-plt.savefig('DC_and_Flatfield.pdf', dpi=300)
+if SAVEFIG:
+    plt.savefig('DC_and_Flatfield.pdf', dpi=300)
 
 fig, ax = plt.subplots(figsize=[4, 4.9])
 ln1 = plt.plot(rawimage[700, :], label='raw', color='red')
@@ -229,7 +250,8 @@ labs = [l.get_label() for l in lns]
 plt.margins(x=0, y=0, tight=True)
 plt.legend(lns, labs)
 plt.tight_layout()
-plt.savefig('DC_and_Flatfield2.pdf', dpi=300)
+if SAVEFIG:
+    plt.savefig('DC_and_Flatfield2.pdf', dpi=300)
 
 # ## Saving data
 #
@@ -277,4 +299,5 @@ axs[1].set_xlabel('$E_0\ (eV)$')
 axs[1].set_ylabel('Reflectivity')
 axs[1].legend()
 plt.tight_layout(h_pad=0.0, pad=0)
-plt.savefig('HDRcomparison.pdf')
+if SAVEFIG:
+    plt.savefig('HDRcomparison.pdf')

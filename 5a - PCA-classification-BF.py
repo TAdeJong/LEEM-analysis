@@ -13,7 +13,7 @@
 #     name: python3
 # ---
 
-# # PCA classification: Bright Field data
+# # 5a - PCA classification: Bright Field data
 # Here, we will use Principal Component Analysis to reduce the dimensionality of the measured spectra, to visualize the spectra and to cluster the data, automatically assigning labels to different areas. First some preliminaries:
 
 # +
@@ -76,7 +76,7 @@ IVs
 coarseIVs = IVs[:,::coarsen, ::coarsen].reshape((IVs.shape[0],-1)).T.persist()
 coarseIVs
 
-# Get metadata from netCDF file for plotting
+# Get metadata from netCDF file for plotting (Not saved in zarr of the driftcorrected)
 xdata = xr.open_dataset(os.path.join(folder, name +'_detectorcorrected.nc'))
 EGY = xdata.Energy_set
 multiplier = xdata.multiplier
@@ -106,6 +106,8 @@ plt.ylim([None,1])
 plt.savefig(f'scree_plot_BF_{pipe_names}.pdf')
 f"{dimensions} PCA components explain {scree.sum():.4f} of the total variance"
 
+# The sign of the PCA vectors has a degeneracy dependent on the random initialization: minus a PCA vector explains as much variance as plus the vector, as we take a linear span.
+#
 # To make the visualization reproducible, the degeneracy of the sign of the PCA components needs to be lifted. Here, we align the signs such that positive vector corresponds to being brighter in the majority of the images.
 # After this we can transform all original data to the reduced number of dimensions
 
@@ -175,7 +177,7 @@ plt.savefig(f'BF2_visualization_{pipe_names}.pdf')
 # -
 
 # ## Clustering: $k$-means
-# To assign labels to different spectra, we cluster using a standard unsupervised machine learning algorithm: $k$-means:
+# To assign labels to different spectra, we cluster using a standard unsupervised machine learning algorithm: the $k$-means clustering algorithm:
 
 rIVs = rIVs.compute()
 kmeans_d = 6

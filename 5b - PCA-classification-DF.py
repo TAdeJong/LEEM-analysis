@@ -13,8 +13,11 @@
 #     name: python3
 # ---
 
-# # PCA classification: Dark Field data
-# Here, we will use Principal Component Analysis to reduce the dimensionality of the measured spectra, to visualize the spectra and to cluster the data, automatically assigning labels to different areas. First some preliminaries:
+# # 5b - PCA classification: Dark Field data
+# Here, we will use Principal Component Analysis to reduce the dimensionality of the measured dark field spectra, to visualize the spectra and to cluster the data, automatically assigning labels to different areas. 
+# This notebook is nominally the same as 5a, but applied to the dark field data and resulting in the dark field figures of the paper.
+#
+# First some preliminaries:
 
 # +
 import numpy as np

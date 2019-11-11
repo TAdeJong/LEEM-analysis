@@ -13,7 +13,7 @@
 #     name: python3
 # ---
 
-# # Accuracy testing
+# # 4 - Accuracy testing
 # To test the accuracy of the algorithm, we need some data of which the 'true shift' is known. For this purpose we created a dataset of images with a known relative shift, before adding a variable amount of noise.
 
 # +
@@ -21,10 +21,13 @@ import numpy as np
 import dask.array as da
 import matplotlib.pyplot as plt
 import xarray as xr
+import os
 
 from scipy.ndimage.interpolation import shift
 from dask.distributed import Client, LocalCluster
 from Registration import *
+
+folder = './data'
 
 cluster = LocalCluster()
 client = Client(cluster)
@@ -47,16 +50,18 @@ dE = 10
 x = np.arange(length)
 xshifts = x**2/(4*length)
 xshifts -= xshifts.mean()
-plt.plot(xshifts)
 np.random.seed(42)
 yshifts = np.random.random(length)
 yshifts -= yshifts.mean()
-plt.plot(yshifts)
-plt.ylabel('shift')
-plt.xlabel('index');
+trueshifts = xr.DataArray(np.stack([xshifts, yshifts]), 
+                          dims=('direction', 'n'), 
+                          coords={'n':np.arange(length), 
+                                  'direction': ['x','y']},
+                          name='shift')
+trueshifts.plot(hue='direction')
 
 
-# Next, we apply the shifts to (copies of the annulus image) to create the dataset
+# Next, we apply the shifts to (copies of the annulus image) to create the dataset. Once again using `dask` and `gufunc`s allows for effortless streaming and parallelization.
 
 # +
 #Todo: deduplicate (w.r.t. Driftcorrection) by moving to Registration. auto output_dtypes not supported by da.as_gufunc
@@ -90,9 +95,9 @@ da.random.seed(42)
 noise = da.random.normal(size=synthetic.shape, chunks=synthetic.chunks) #.persist()
 
 # Create an xarray.DataArray to store the results
-As = np.arange(0., 4., 0.05)
-sigmas = np.arange(0, 20, 0.25)
-ns = np.arange(length)
+As = np.arange(0., 4., 0.05)  # Noise amplitudes to calculate for
+sigmas = np.arange(0, 20, 0.25)  # Smoothing values to calculate for
+ns = np.arange(length)  # iteration over the datapoints / images, as we will save the found shift for each image.
 direction = ['x', 'y']
 res = xr.DataArray(np.zeros((len(As), len(sigmas), 2, len(ns))), 
              coords={'A' : As, 's': sigmas, 'direction': direction, 'n': ns}, 
@@ -118,13 +123,14 @@ for A in As:
             print(f"A={A}, s={s} completed")
         else: 
             print(f"Skipping A={A}, s={s}")
-    res.to_netcdf('accuracy_results_testing.nc')
+    res.to_netcdf(os.path.join(folder, 'accuracy_results.nc'))
 
 # ## Plotting
 # Let's visualize the results! This produces Figure 8 of the paper.
 
 # +
-data = xr.open_dataset('accuracy_results.nc')
+# One can remove _reference to view newly generated results
+data = xr.open_dataset(os.path.join(folder, 'accuracy_result_reference.nc')) 
 pltdat = np.abs(data['shift'] + trueshifts)
 pltdat = pltdat.rename({'s':'$\sigma$'})
 pltdat['$\sigma$'].attrs['units'] = 'pixels'
@@ -207,5 +213,4 @@ axs[4].set_title("Optimal error spread")
 
 #plt.savefig('simulation_error.pdf')
 # -
-
 

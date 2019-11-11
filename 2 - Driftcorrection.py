@@ -13,6 +13,10 @@
 #     name: python3
 # ---
 
+# # 2 - Drift Correction
+# This notebook implements and show cases the drift correction algorithm as described in section 4 of the paper. It uses cross correlation of all pairs of images after applying digital smoothing and edge detection filters to align Low Energy Electron Microscopy images with each other. When applied correctly, this allows for sub-pixel accurate image registration.
+# This process is applied to the output of notebook 1, the detector corrected images
+
 # +
 import numpy as np
 import os
@@ -37,17 +41,21 @@ from scipy.interpolate import interp1d
 
 from skimage import filters
 
-
+# Most relevant functions can be found in Registration.py
 from Registration import *
-# -
 
 plt.rcParams["figure.figsize"] = [12., 8.]
+
+# +
+
 cluster = LocalCluster() # n_workers=1, threads_per_worker=8)
 client = Client(cluster)
 client
 
-# +
 client.upload_file('Registration.py')
+
+
+# -
 
 def plot_stack(images, n, grid=False):
     """Plot the n-th image from a stack of n images.
@@ -66,6 +74,8 @@ folder = r'./data'
 
 name = '20171120_215555_3.5um_583.1_IVhdr_DF2'
 start, stop, stride, dE = 0, -1, 1, 10 #DF
+
+
 Eslice = slice(start, stop, stride)
 
 # Grab a window of 2*fftsize around the center of the picture
@@ -76,11 +86,12 @@ z_factor = 1
 original = xr.open_dataset(os.path.join(folder, name + '_detectorcorrected.nc'), chunks={'time': dE})
 original = original.Intensity.data
 
+# For interactive use we can view the original data
 interactive(lambda n: plot_stack(original, n), 
             n=widgets.IntSlider(original.shape[0]//2, 0, original.shape[0]-1, 1, continuous_update=False)
            ) 
 
-# Step 1 to 3 of the algorithm as described in paper.
+# Step 1 to 3 of the algorithm as described in section 4 of the paper.
 sobel = crop_and_filter(original[Eslice,...].rechunk({0:dE}), sigma=3, finalsize=2*fftsize)
 sobel = (sobel - sobel.mean(axis=(1,2), keepdims=True)) #.persist()  
 sobel

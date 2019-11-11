@@ -14,7 +14,7 @@
 # ---
 
 # # 3 - Benchmarking
-# This notebook explores the performance of the driftcorrection algorithm as defined in `2 - Driftcorrection` by benchmarking the time it takes to driftcorrected stacks of different numbers of images.
+# This notebook explores the performance of the driftcorrection algorithm as defined in `2 - Driftcorrection` by benchmarking the time it takes to driftcorrect stacks of different numbers of images.
 
 # Needed imports
 from Registration import *
@@ -30,7 +30,7 @@ name = '20171120_160356_3.5um_591.4_IVhdr'
 original = xr.open_dataset(os.path.join(folder, name + '_detectorcorrected.nc'), chunks={'time': 1})
 original = original.Intensity.data
 
-# Define a bunch of constants
+# Define fftsize used for the drift correction algorithm actual size of the fft is twice this value.
 fftsize = 256 // 2
 
 
@@ -97,7 +97,7 @@ for p, stride in enumerate(strides):
 # ## Plotting
 # We can plot the results of either the benchmark run above or the reference results. This is done using `xarray` plotting interface on the created datasets. First we do some cleaning up of the data and recombination:
 
-data = xr.open_dataarray(os.path.join(folder, 'benchmarkresult_reference.nc')) #remove _reference to view newly generated results
+data = xr.open_dataarray(os.path.join(folder, 'benchmarkresult_reference.nc')) # One can remove _reference to view newly generated results
 data
 
 # +
@@ -108,7 +108,7 @@ data = xr.concat([data.isel(t=1), data.isel(t=slice(2,5)).diff(dim='t', label='l
 data.attrs['long_name'] = 'Run time'
 data.attrs['units'] = 's'
 
-# Define a nicer 'Phase' dimension instead of 't'
+# Define a nicer 'Phase' of the algorithm dimension instead of 't', as it is saved in the file.
 data.coords['Phase'] = ('t', ['Filter+CC', 'Least Squares', 'Shift and write', 'Total']) 
 data = data.swap_dims({'t': 'Phase'})
 data.coords['N'] = ('strides', 700//data.coords['strides'])
