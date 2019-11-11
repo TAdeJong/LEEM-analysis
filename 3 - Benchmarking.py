@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.4'
-#       jupytext_version: 1.2.1
+#       jupytext_version: 1.2.4
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -47,7 +47,7 @@ res.coords
 
 # Before we can start, we connect to the dask-scheduler and upload the used functions
 
-cluster = LocalCluster(n_workers=2, threads_per_worker=10, memory_limit='15GB')
+cluster = LocalCluster()
 client = Client(cluster)
 client.upload_file('Registration.py')
 client

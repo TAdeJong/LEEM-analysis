@@ -31,7 +31,6 @@ import ipywidgets as widgets
 from ipywidgets import interactive
 
 from scipy.optimize import least_squares
-#from scipy.ndimage.interpolation import shift 
 import scipy.ndimage as ndi
 import scipy.sparse as sp
 from scipy.interpolate import interp1d
@@ -43,7 +42,7 @@ from Registration import *
 # -
 
 plt.rcParams["figure.figsize"] = [12., 8.]
-cluster = LocalCluster(n_workers=1, threads_per_worker=8)
+cluster = LocalCluster() # n_workers=1, threads_per_worker=8)
 client = Client(cluster)
 client
 

@@ -48,7 +48,7 @@ cmaps = [bRed, bGreen, bBlue]*2
 colors = [toniceRGB([1,0,0]), toniceRGB([0,1,0]), toniceRGB([0,0,1])]*2
 
 #cluster = LocalCluster(n_workers=3, threads_per_worker=4, memory_limit='10GB')
-client = Client('127.0.0.1:35775')
+client = Client()
 client
 # -
 

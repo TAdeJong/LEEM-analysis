@@ -48,7 +48,7 @@ bGreen = LinearSegmentedColormap.from_list('bGreen', ['black', toniceRGB([0,1,0]
 cmaps = [bRed, bGreen, bBlue]*2
 colors = [toniceRGB([1,0,0]), toniceRGB([0,1,0]), toniceRGB([0,0,1])]*2
 
-client = Client('tcp://127.0.0.1:62371')
+client = Client()
 client
 
 
