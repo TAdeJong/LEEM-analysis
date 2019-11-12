@@ -34,18 +34,18 @@ import xarray as xr
 from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 
 
-def toniceRGB(image):
+def to_niceRGB(image):
     """Use basis colors as suggested by P. Kovesi http://arxiv.org/abs/1509.03700"""
     A = np.array([[0.90, 0.17, 0.00],
                  [0.00, 0.50, 0.00],
                  [0.10, 0.33, 1.00]])
     return np.dot(image,A)
 
-bRed = LinearSegmentedColormap.from_list('bRed', ['black', toniceRGB([1,0,0])], N=256)
-bBlue = LinearSegmentedColormap.from_list('bBlue', ['black', toniceRGB([0,0,1])], N=256)
-bGreen = LinearSegmentedColormap.from_list('bGreen', ['black', toniceRGB([0,1,0])], N=256)
+bRed = LinearSegmentedColormap.from_list('bRed', ['black', to_niceRGB([1,0,0])], N=256)
+bBlue = LinearSegmentedColormap.from_list('bBlue', ['black', to_niceRGB([0,0,1])], N=256)
+bGreen = LinearSegmentedColormap.from_list('bGreen', ['black', to_niceRGB([0,1,0])], N=256)
 cmaps = [bRed, bGreen, bBlue]*2
-colors = [toniceRGB([1,0,0]), toniceRGB([0,1,0]), toniceRGB([0,0,1])]*2
+colors = [to_niceRGB([1,0,0]), to_niceRGB([0,1,0]), to_niceRGB([0,0,1])]*2
 
 #cluster = LocalCluster(n_workers=3, threads_per_worker=4, memory_limit='10GB')
 client = Client()
@@ -164,13 +164,13 @@ fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=[6, 3], constrained_layout=True)
 img = rIVs[:, :3].reshape(IVs.shape[1:] + (3,)).swapaxes(0, 1)
 img = img - img.min(axis=(0, 1), keepdims=True)
 img = img / img.max(axis=(0, 1), keepdims=True)
-ax1.imshow(toniceRGB(img), interpolation='none')
+ax1.imshow(to_niceRGB(img), interpolation='none')
 ax1.set_title('BF PCA component 1 to 3')
 
 img = rIVs[:, 3:6].reshape(IVs.shape[1:] + (3,)).swapaxes(0, 1)
 img = img - img.min(axis=(0, 1), keepdims=True)
 img = img / img.max(axis=(0, 1), keepdims=True)
-ax2.imshow(toniceRGB(img), interpolation='none')
+ax2.imshow(to_niceRGB(img), interpolation='none')
 ax2.set_title('BF PCA component 4 to 6')
 #plt.tight_layout()
 plt.savefig(f'BF2_visualization_{pipe_names}.pdf')
@@ -221,9 +221,9 @@ color = rIVs[::coarse_2d,:3]
 center_colors = kmeans.cluster_centers_[:,:3] - color.min(axis=0)
 color = color - color.min(axis=0, keepdims=True)
 center_colors = center_colors / color.max(axis=0)
-center_colors = toniceRGB(center_colors)
+center_colors = to_niceRGB(center_colors)
 color = color / color.max(axis=0,keepdims=True)
-color = toniceRGB(color)
+color = to_niceRGB(color)
 
 newcmap = ListedColormap(center_colors)
 
@@ -310,7 +310,7 @@ coarsen3d = coarsen
 color = rIVs[::coarsen3d,:3]
 color = color - color.min(axis=0, keepdims=True)
 color = color / color.max(axis=0,keepdims=True)
-color = toniceRGB(color)
+color = to_niceRGB(color)
 xx,yy = np.meshgrid(edges[0][:-1], edges[1][:-1])
 
 # +

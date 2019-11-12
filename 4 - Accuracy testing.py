@@ -35,7 +35,8 @@ client.upload_file('Registration.py')
 client
 # -
 
-fftsize=256*2 // 2
+# Here, the image size is the size of the fft (2*fftsize) and actually twice as large as the size used in benchmarking.
+fftsize = 512 // 2
 x,y = np.mgrid[-fftsize-4:fftsize+4,-fftsize-4:fftsize+4]
 r_min = 50
 r_max = 100
@@ -64,7 +65,6 @@ trueshifts.plot(hue='direction')
 # Next, we apply the shifts to (copies of the annulus image) to create the dataset. Once again using `dask` and `gufunc`s allows for effortless streaming and parallelization.
 
 # +
-#Todo: deduplicate (w.r.t. Driftcorrection) by moving to Registration. auto output_dtypes not supported by da.as_gufunc
 @da.as_gufunc(signature="(i,j),(2)->(i,j)", output_dtypes=float, vectorize=True)
 def shift_images(image, shifts):
     """Shift copies of image over shiftsX and shiftsY."""
@@ -73,7 +73,7 @@ def shift_images(image, shifts):
 da_annulus = da.from_array(annulus, chunks='auto' )
 shifts = da.from_array(np.stack([xshifts, yshifts], axis=1), chunks=(dE,2))
 
-synthetic = shift_images(da_annulus, shifts) #.persist()
+synthetic = shift_images(da_annulus, shifts) 
 
 
 # -
@@ -92,7 +92,7 @@ def only_filter(images, sigma=11, mode='nearest'):
 
 # Create the random noise to be added in different magnitudes to the data.
 da.random.seed(42)
-noise = da.random.normal(size=synthetic.shape, chunks=synthetic.chunks) #.persist()
+noise = da.random.normal(size=synthetic.shape, chunks=synthetic.chunks) 
 
 # Create an xarray.DataArray to store the results
 As = np.arange(0., 4., 0.05)  # Noise amplitudes to calculate for
@@ -113,9 +113,9 @@ for A in As:
             sobel = sobel - sobel.mean(axis=(1,2), keepdims=True)  
             Corr = dask_cross_corr(sobel)
             weights, argmax = max_and_argmax(Corr)
-            Wc, Mc = calculate_halfmatrices(weights, argmax, fftsize=fftsize)
-            coords = np.arange(Wc.shape[0])
-            coords, weightmatrix, DX, DY, row_mask = threshold_and_mask(0.0, Wc, Mc, coords=coords)
+            W, DX_DY = calculate_halfmatrices(weights, argmax, fftsize=fftsize)
+            coords = np.arange(W.shape[0])
+            coords, weightmatrix, DX, DY, row_mask = threshold_and_mask(0.0, W, DX_DY, coords=coords)
             dx, dy = calc_shift_vectors(DX, DY, weightmatrix, wpower=4)
             ddx, ddy = interp_shifts(coords, [dx,dy], length)
             res.loc[dict(s=s, A=A, direction='x')] = ddx
@@ -211,6 +211,6 @@ axs[2].set_title("Mean error")
 axs[4].set_title("Optimal error spread")
     
 
-#plt.savefig('simulation_error.pdf')
+plt.savefig('simulation_error.pdf')
 # -
 

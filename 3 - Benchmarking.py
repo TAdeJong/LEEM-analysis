@@ -41,7 +41,8 @@ fftsize = 256 // 2
 
 iters = np.arange(5)
 sigmas = [3, 7, 9, 11, 13, 17]
-strides = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 35, 50, 70,])
+#strides = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 35, 50, 70,])
+strides = np.array([35, 50, 70,])
 ts = [0,1,2,3,4]
 res = xr.DataArray(np.zeros((len(iters), len(sigmas), len(strides), len(ts))), 
              coords={'i':iters, 'sigma': sigmas, 'strides': strides, 't': ts}, 
@@ -79,10 +80,10 @@ for stride in strides:
             sobel = sobel - sobel.mean(axis=(1,2), keepdims=True)  
             Corr = dask_cross_corr(sobel)
             weights, argmax = max_and_argmax(Corr)
-            Wc, Mc = calculate_halfmatrices(weights, argmax, fftsize=fftsize)
+            W, DX_DY = calculate_halfmatrices(weights, argmax, fftsize=fftsize)
             t[1] = (time.time() - (t[0]+tstart))
             coords = np.arange(sliced_data.shape[0])
-            coords, weightmatrix, DX, DY, row_mask = threshold_and_mask(0.0, Wc, Mc, coords=coords)
+            coords, weightmatrix, DX, DY, row_mask = threshold_and_mask(0.0, W, DX_DY, coords=coords)
             t[2] = (time.time() - (t[0]+tstart))
             dx, dy = calc_shift_vectors(DX, DY, weightmatrix)
             t[3] = (time.time() - (t[0]+tstart))

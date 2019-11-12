@@ -38,18 +38,18 @@ from pyL5.lib.analysis.container import Container
 
 from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 
-def toniceRGB(image):
+def to_niceRGB(image):
     """Use basis colors as suggested by P. Kovesi http://arxiv.org/abs/1509.03700"""
     A = np.array([[0.90, 0.17, 0.00],
                  [0.00, 0.50, 0.00],
                  [0.10, 0.33, 1.00]])
     return np.dot(image,A)
 
-bRed = LinearSegmentedColormap.from_list('bRed', ['black', toniceRGB([1,0,0])], N=256)
-bBlue = LinearSegmentedColormap.from_list('bBlue', ['black', toniceRGB([0,0,1])], N=256)
-bGreen = LinearSegmentedColormap.from_list('bGreen', ['black', toniceRGB([0,1,0])], N=256)
+bRed = LinearSegmentedColormap.from_list('bRed', ['black', to_niceRGB([1,0,0])], N=256)
+bBlue = LinearSegmentedColormap.from_list('bBlue', ['black', to_niceRGB([0,0,1])], N=256)
+bGreen = LinearSegmentedColormap.from_list('bGreen', ['black', to_niceRGB([0,1,0])], N=256)
 cmaps = [bRed, bGreen, bBlue]*2
-colors = [toniceRGB([1,0,0]), toniceRGB([0,1,0]), toniceRGB([0,0,1])]*2
+colors = [to_niceRGB([1,0,0]), to_niceRGB([0,1,0]), to_niceRGB([0,0,1])]*2
 
 client = Client()
 client
@@ -73,6 +73,7 @@ dset = da.from_zarr(os.path.join(folder, name + '_driftcorrected.zarr'))
 
 IVs = dset[Erange, x_slice, y_slice].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
 fullIVs = dset[:, x_slice, y_slice].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
+coarseIVs = IVs[:,::coarsen, ::coarsen].reshape((IVs.shape[0],-1)).T.persist()
 IVs
 # -
 
@@ -82,11 +83,12 @@ EGY = xdata.Energy_set
 multiplier = xdata.multiplier
 plt.plot(EGY, multiplier)
 
-coarseIVs = IVs[:,::coarsen, ::coarsen].reshape((IVs.shape[0],-1)).T.persist()
+# ## Principal Component Analysis
+# To reduce the data to a reasonable number of dimensions, we use a pipeline of a standardscaler and PCA:
+
 pca = PCA(n_components=dimensions, whiten=True, random_state=4)
 pipe = make_pipeline(StandardScaler(), pca)
 pipe_names = '_'.join(pipe.named_steps.keys())
-pipe_names
 
 pipe.fit(coarseIVs)
 
@@ -103,14 +105,21 @@ plt.ylim([None,1])
 plt.savefig(f'scree_plot_DF_{pipe_names}.pdf')
 f"{dimensions} PCA components explain {scree.sum():.4f} of the total variance"
 
-# Align signs with brightness in original pictures
-pipe_diffs = pipe.inverse_transform(3*np.eye(6)).compute()
-signs = np.sign(np.nanmean((np.log(pipe_diffs) - np.log(pipe.named_steps['standardscaler'].mean_)),axis=1))[:,np.newaxis]
-print(signs)
-pipe.named_steps['pca'].components_ *= signs
+# The sign of the PCA vectors has a degeneracy dependent on the random initialization: minus a PCA vector explains as much variance as plus the vector, as we take a linear span.
+#
+# To make the visualization reproducible, the degeneracy of the sign of the PCA components needs to be lifted. Here, we align the signs such that positive vector corresponds to being brighter in the majority of the images.
+# After this we can transform all original data to the reduced number of dimensions
 
-print('Transforming PCA')
+pipe_diffs = pipe.inverse_transform(np.eye(dimensions)).compute()
+signs = np.sign(np.nanmean((np.log(pipe_diffs) - 
+                            np.log(pipe.named_steps['standardscaler'].mean_)),
+                           axis=1))
+pipe.named_steps['pca'].components_ *= signs[:,np.newaxis]
+signs
+
 rIVs = pipe.transform(IVs.reshape(IVs.shape[0], -1).T).persist()
+
+# To visualize the dimension reduction, we calculate the spectra corresponding to the extrema of the components, as well as the spectra _occuring in the dataset_ with the extreme values of the components:
 
 # +
 argextrema = da.concatenate([rIVs[rIVs.argmin(axis=0), :], 
@@ -142,6 +151,10 @@ for i in range(dimensions):
     axs[1,i].margins(x=0)
 axs[1,0].set_ylabel('Intensity')
 plt.savefig(f'DF_PCAcomponents_{pipe_names}.pdf')
+
+# ## Visualization
+#
+# To visualize the dataset, we combine the PCA components in groups of three, and use these as RGB images in real space:
 
 # +
 fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=[6, 3], constrained_layout=True)

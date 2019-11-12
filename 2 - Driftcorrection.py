@@ -68,13 +68,22 @@ def plot_stack(images, n, grid=False):
     plt.show()
 
 # +
+# A bunch of constants
+
 folder = r'./data'
-#name = '20171120_160356_3.5um_591.4_IVhdr'
-#start, stop, stride, dE = 40, -1, 1, 10 #BF
+
+# Pick the dataset to apply driftcorrection to and the range
+# name = '20171120_160356_3.5um_591.4_IVhdr'
+# start, stop = 40, -1 #BF
 
 name = '20171120_215555_3.5um_583.1_IVhdr_DF2'
-start, stop, stride, dE = 0, -1, 1, 10 #DF
+start, stop = 0, -1 #DF
 
+# A stride larger than 1 takes 1 every stride images of the total dataset. 
+# This decreases computation time by a factor of stride**2, but decreases accuracy
+stride = 5
+# dE is the blocksize used by dask, the number of images computed for at once.
+dE = 10
 
 Eslice = slice(start, stop, stride)
 
@@ -156,13 +165,13 @@ display(widget)
 weights, argmax = max_and_argmax(Corr)
 
 # Do actual computations; get a cup of coffee
-t = time.time()
-Wc, Mc = calculate_halfmatrices(weights, argmax, fftsize=fftsize)
-print(time.time()-t)
+t = time.monotonic()
+W, DX_DY = calculate_halfmatrices(weights, argmax, fftsize=fftsize)
+print(time.monotonic()-t)
 
-### Step 6 of the algorithm
-wc_diag = np.atleast_2d(np.diag(Wc))
-W_n = Wc / np.sqrt(wc_diag.T*wc_diag)
+# Step 6 of the algorithm
+w_diag = np.atleast_2d(np.diag(W))
+W_n = W / np.sqrt(w_diag.T*w_diag)
 
 # +
 # Plot W, DX and DY to pick a value for W_{min} (Step 7 of algorithm)
@@ -209,7 +218,7 @@ display(widget)
 # Part two of step 7 of the algorithm
 min_norm = widget.result
 nr = np.arange(Wc.shape[0])*stride + start
-coords, weightmatrix, DX, DY, row_mask = threshold_and_mask(min_norm, Wc, Mc, nr)
+coords, weightmatrix, DX, DY, row_mask = threshold_and_mask(min_norm, W, DX_DY, nr)
 #Step 8 of the algorithm: reduce the shift matrix to two vectors of absolute shifts
 dx, dy = calc_shift_vectors(DX, DY, weightmatrix)
 plt.plot(coords, dx, '.', label='dx')
@@ -231,7 +240,7 @@ shifts
 #Inferring output dtype is not supported in dask yet, so we need original.dtype here.
 @da.as_gufunc(signature="(i,j),(2)->(i,j)", output_dtypes=original.dtype, vectorize=True)
 def shift_images(image, shift):
-    """Shift image over shift."""
+    """Shift `image` by `shift` pixels."""
     return ndi.shift(image, shift=shift, order=1)
 
 padded = da.pad(original.rechunk({0:dE}), 
