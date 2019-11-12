@@ -37,7 +37,7 @@ DC_dat =  xr.open_dataset(os.path.join(folder, '20171205_115846_0.66um_475.8_DC.
 DC_dat
 
 # +
-# We always grab a part of the center of the image for calibration
+# We always grab a square part of the center of the image for calibration
 radius = 100
 DC = DC_dat['Intensity'].mean(dim='time')
 
@@ -49,7 +49,6 @@ DCval = DC[(640-radius):(640+radius), (512-radius):(512+radius)].mean()
 # We calibrate the gain of the MCP, by fitting Image intensity versus gain $G(V_{MCP})$. First we load the reference data:
 
 # +
-conts = []
 CPvals = []
 Ivals = []
 Iorigs = []
@@ -64,10 +63,9 @@ for file in ['20171205_143305_31um_474.2_sweepCHANNELPLATE_SET_higherintensity',
              '20171205_103440_0.66um_479.2_sweepCHANNELPLATE_SET_highintensity', 
              '20171205_100540_0.66um_479.2_sweepCHANNELPLATE_SET_lowintensity_v2', 
              ]:
-    cont = xr.open_dataset(os.path.join(folder, file+'.nc'))
-    conts.append(cont)
-    CP = np.array(cont['MCP_bias'])
-    Orig = cont['Intensity']
+    dset = xr.open_dataset(os.path.join(folder, file+'.nc'))
+    CP = np.array(dset['MCP_bias'])
+    Orig = dset['Intensity']
     DCcor = Orig - DC
     dats.append(Orig[:, (c[0]-radius):(c[0]+radius), (c[1]-radius):(c[1]+radius)])
     V = np.var(Orig[:, (640-radius):(c[0]+radius), (c[1]-radius):(c[1]+radius)].data, axis=(1,2))
@@ -77,7 +75,7 @@ for file in ['20171205_143305_31um_474.2_sweepCHANNELPLATE_SET_higherintensity',
     Iorigs.append(Orig)
     CPvals.append(CP)
     Ivals.append(DCcor)
-    EGY.append(cont['Energy_set'][0])
+    EGY.append(dset['Energy_set'][0])
 Ivals = np.stack(Ivals)
 CPvals = np.stack(CPvals)
 Iorigs = np.stack(Iorigs)
@@ -85,9 +83,9 @@ Iorigs = np.stack(Iorigs)
 
 # As described in the paper, we fit a function of the following form:
 #
-# $G(V_\text{MCP}) = A_i\exp\left(\sum_{k=0}^9 c_k {V_\text{MCP}}^{2k+1}\right)$
+# $G(V_\text{MCP}) = A_i\exp\left(\sum_{k=0}^8 c_k {V_\text{MCP}}^{2k+1}\right)$
 #
-# As initial guess we will assume 3 equal amplitudes, a non-zero linear components and zero for the higher order terms
+# As initial guess we will assume 3 equal amplitudes $A_i$, a non-zero linear component $c_0$ and zero for the higher order terms
 
 # +
 # Fitting and error function definitions
@@ -105,6 +103,7 @@ def polynomial(x, *coeffs):
     return res
 
 def mod_exp(V, *coeffs):
+    "Modified exponent function"
     return np.exp(-1*odd_polynomial(V, *coeffs))
 
 def fit_func(CP, *params):
@@ -122,7 +121,7 @@ fullres = least_squares(err_func, initial_params, args=(CPvals, Ivals),
                          max_nfev=1000000)
 res = fullres['x']
 print(fullres['message'])
-Markdown('$'+'$  \n$'.join(['c_{} = {:.5f}'.format(k, res[3+k]) for k in range(len(res[3:]))])+'$  \n$\sum_{k=0}'+'^{}c_k = {:.5f}$'.format(len(res[3:]), np.sum(res[3:])))
+Markdown('$'+'$  \n$'.join(['c_{} = {:.5f}'.format(k, res[3+k]) for k in range(len(res[3:]))])+'$  \n$\sum_{k=0}'+'^{}c_k = {:.5f}$'.format(len(res[3:])-1, np.sum(res[3:])))
 
 
 def multiplier_from_CP(V_MCP):
@@ -165,7 +164,7 @@ for ax in axs[:2]:
     ax.xaxis.set_label_position("top")
     ax.tick_params(axis='x', labeltop=True, labelbottom=False)
 if SAVEFIG:
-    plt.savefig(f'Channelplate_calibration_test_{len(res)}.pdf')
+    plt.savefig(f'Channelplate_calibration_kmax={len(res[3:])-1}.pdf')
 # -
 
 # ## Flatfielding 
@@ -208,6 +207,7 @@ plt.colorbar()
 
 corrected, multiplier = correctImages(data, DC, FF / G_MCP[:32].mean())
 multiplier *= G_MCP
+# Pick a specific nice image for the figure at index 77
 rawimage = data[77]
 CPcorimage = corrected[77] / multiplier[77]
 
@@ -232,12 +232,12 @@ if SAVEFIG:
     plt.savefig('DC_and_Flatfield.pdf', dpi=300)
 
 fig, ax = plt.subplots(figsize=[4, 4.9])
-ln1 = plt.plot(rawimage[700, :], label='raw', color='red')
+line1 = plt.plot(rawimage[700, :], label='raw', color='red')
 plt.ylabel('Intensity (CCD counts)')
 plt.xlabel('y (pixels)')
 plt.ylim(im.get_clim())
 plt.twinx()
-ln2 = plt.plot(CPcorimage[700,:], label='DC and FF corrected', color='green')
+line2 = plt.plot(CPcorimage[700,:], label='DC and FF corrected', color='green')
 plt.ylabel('Reflectivity')
 plt.ylim(im2.get_clim())
 ax.annotate('', xy=(1024-887, 23000),  xycoords='data',
@@ -245,10 +245,10 @@ ax.annotate('', xy=(1024-887, 23000),  xycoords='data',
             arrowprops=dict(facecolor='red', shrink=0.1),
             horizontalalignment='right', verticalalignment='top',
             )
-lns = ln1 + ln2
-labs = [l.get_label() for l in lns]
+lns = line1 + line2
+labels = [l.get_label() for l in lns]
 plt.margins(x=0, y=0, tight=True)
-plt.legend(lns, labs)
+plt.legend(lns, labels)
 plt.tight_layout()
 if SAVEFIG:
     plt.savefig('DC_and_Flatfield2.pdf', dpi=300)
@@ -278,22 +278,20 @@ xrcorrected.to_netcdf(os.path.join(folder, DFdataname + '_detectorcorrected.nc')
 xrcorrected
 
 # ## Comparison of results
-# Finally, we visualize the effect of active tuning of the gain by plotting a spectrum measured with regular settings and one with adaptive gain.
+# Finally, we visualize the effect of active tuning of the gain by plotting a spectrum (from a different dataset) measured with regular settings and one with adaptive gain.
 
 # +
-Ehdr, Ihdr = np.genfromtxt(os.path.join(folder, '20190509_142203_3.5um_561.5_IVhdrBILAYER_.csv'), unpack=True)
-E, I = np.genfromtxt(os.path.join(folder, '20190509_155656_3.5um_562.1_IVBILAYER.csv'), unpack=True)
-CP = np.genfromtxt(os.path.join(folder, '20190509_155656_3.5um_562.1_IV_CHANNELPLATE.txt'))
-CPhdr = np.genfromtxt(os.path.join(folder, '20190509_142203_3.5um_561.5_IVhdr_CHANNELPLATE.txt'))
+hdr = xr.load_dataset(os.path.join(folder, '20190509_142203_3.5um_561.5_IVhdr_BILAYER.nc'))
+ref = xr.load_dataset(os.path.join(folder, '20190509_155656_3.5um_562.1_IV_BILAYER.nc'))
 
 fig, axs = plt.subplots(nrows=2, gridspec_kw={'height_ratios': [0.8,2]}, sharex=True, figsize=[4,3])
-axs[0].plot(Ehdr, CPhdr)
-axs[0].plot(E, CP)
+axs[0].plot(hdr.Energy, hdr.MCP_bias)
+axs[0].plot(ref.Energy, ref.MCP_bias)
 axs[0].margins(x=0)
 axs[0].set_ylabel('$V_{MCP}\ (kV)$')
 
-axs[1].semilogy(Ehdr,Ihdr, label='HDR corrected')
-axs[1].semilogy(E,I, label='Constant $V_{mcp}$, corrected')
+axs[1].semilogy(hdr.Energy, hdr.Intensity, label='HDR corrected')
+axs[1].semilogy(ref.Energy, ref.Intensity, label='Constant $V_{mcp}$, corrected')
 axs[1].margins(x=0)
 axs[1].set_xlabel('$E_0\ (eV)$')
 axs[1].set_ylabel('Reflectivity')
@@ -301,3 +299,6 @@ axs[1].legend()
 plt.tight_layout(h_pad=0.0, pad=0)
 if SAVEFIG:
     plt.savefig('HDRcomparison.pdf')
+# -
+
+
