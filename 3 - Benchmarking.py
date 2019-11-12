@@ -24,17 +24,20 @@ import time
 from dask.distributed import Client, LocalCluster
 import matplotlib.pyplot as plt
 import os
+import scipy.ndimage as ndi
 
 folder = r'./data'
 name = '20171120_160356_3.5um_591.4_IVhdr'
 original = xr.open_dataset(os.path.join(folder, name + '_detectorcorrected.nc'), chunks={'time': 1})
 original = original.Intensity.data
 
-# Define fftsize used for the drift correction algorithm actual size of the fft is twice this value.
+# Define fftsize used for the drift correction algorithm; actual size of the fft is twice this value.
 fftsize = 256 // 2
 
 
 # Next, we define the grid of parameters for which we will perform the benchmark and the timings we want to save as an empty `xarray.DataArray`.
+#
+# **Note**: the parameters noted here will run for several hours at least even on reasonably fast hardware.
 
 iters = np.arange(5)
 sigmas = [3, 7, 9, 11, 13, 17]
@@ -52,12 +55,18 @@ client = Client(cluster)
 client.upload_file('Registration.py')
 client
 
+
+# Inferring output dtype is not supported in dask yet, so we need original.dtype here.
+@da.as_gufunc(signature="(i,j),(2)->(i,j)", output_dtypes=original.dtype, vectorize=True)
+def shift_images(image, shift):
+    """Shift `image` by `shift` pixels."""
+    return ndi.shift(image, shift=shift, order=1)
+
+
 tstart = time.time()
 t = np.zeros((5,))
-for p, stride in enumerate(strides):
+for stride in strides:
     for sigma in sigmas:
-        if p == 0:
-            break
         for i in iters:
             t[0] = time.time() - tstart
             #start, stride, dE = 40, 1, 10
@@ -72,26 +81,27 @@ for p, stride in enumerate(strides):
             weights, argmax = max_and_argmax(Corr)
             Wc, Mc = calculate_halfmatrices(weights, argmax, fftsize=fftsize)
             t[1] = (time.time() - (t[0]+tstart))
-            coords = np.arange(sliced_data)
+            coords = np.arange(sliced_data.shape[0])
             coords, weightmatrix, DX, DY, row_mask = threshold_and_mask(0.0, Wc, Mc, coords=coords)
             t[2] = (time.time() - (t[0]+tstart))
             dx, dy = calc_shift_vectors(DX, DY, weightmatrix)
             t[3] = (time.time() - (t[0]+tstart))
             shifts = np.stack(interp_shifts(coords, [dx, dy], n=sliced_data.shape[0]), axis=1)
             neededMargins = np.ceil(shifts.max(axis=0)).astype(int)
-            shifts = da.from_array(shifts[..., np.newaxis], chunks=(dE,-1,1))
-            corrected = da.map_blocks(shift_block, sliced_data, shifts,
-                          margins=neededMargins,
-                          dtype=sliced_data.dtype, 
-                          chunks=(dE,
-                                  sliced_data.shape[1] + neededMargins[0], 
-                                  sliced_data.shape[2] + neededMargins[1]),
-                         )
+            shifts = da.from_array(shifts, chunks=(dE,-1))
+            padded = da.pad(sliced_data, 
+                            ((0, 0), 
+                             (0, neededMargins[0]), 
+                             (0, neededMargins[1])
+                            ),
+                            mode='constant'
+                           )
+            corrected = shift_images(padded.rechunk({1:-1, 2:-1}), shifts)
             corrected[:sliced_data.shape[0]].to_zarr(r'./tempresult.zarr', overwrite=True)
             t[4] = (time.time() - (t[0]+tstart))
             res.loc[dict(i=i,sigma=sigma,strides=stride)] = t
             shutil.rmtree(r'tempresult.zarr')
-            print(t, corrected.shape, weights.shape)
+            print(f"t_tot = {t[0]:.2f}\nn = {corrected.shape[0]}, times = {t[1:]}")
     res.to_netcdf(os.path.join(folder, 'benchmarkresult.nc'))
 
 # ## Plotting
