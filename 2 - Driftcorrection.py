@@ -45,17 +45,14 @@ from skimage import filters
 from Registration import *
 
 plt.rcParams["figure.figsize"] = [12., 8.]
+SAVEFIG = True
+# -
 
-# +
-
-cluster = LocalCluster() # n_workers=1, threads_per_worker=8)
+cluster = LocalCluster(n_workers=1, threads_per_worker=8)
 client = Client(cluster)
+client.upload_file('Registration.py')
 client
 
-client.upload_file('Registration.py')
-
-
-# -
 
 def plot_stack(images, n, grid=False):
     """Plot the n-th image from a stack of n images.
@@ -73,11 +70,11 @@ def plot_stack(images, n, grid=False):
 folder = r'./data'
 
 # Pick the dataset to apply driftcorrection to and the range
-# name = '20171120_160356_3.5um_591.4_IVhdr'
-# start, stop = 40, -1 #BF
+name = '20171120_160356_3.5um_591.4_IVhdr'
+start, stop = 42, -1 #BF
 
-name = '20171120_215555_3.5um_583.1_IVhdr_DF2'
-start, stop = 0, -1 #DF
+# name = '20171120_215555_3.5um_583.1_IVhdr_DF2'
+# start, stop = 0, -1 #DF
 
 # A stride larger than 1 takes 1 every stride images of the total dataset. 
 # This decreases computation time by a factor of stride**2, but decreases accuracy
@@ -112,7 +109,7 @@ Corr
 # +
 # Plot combination of original images, filtered images, crosscorrelation 
 # for illustration purposes
-def plot_corr(i,j, save=False):
+def plot_corr(i,j, save=SAVEFIG):
     #fig = plt.figure(figsize=(8.2, 3.5), constrained_layout=True)
     fig = plt.figure(figsize=(4, 7), constrained_layout=True)
     fig.set_constrained_layout_pads(hspace=0.0, wspace=0.06)
@@ -156,7 +153,7 @@ def plot_corr(i,j, save=False):
 widget = interactive(plot_corr, 
             i=widgets.IntSlider(58-start,0,sobel.shape[0]-1,1, continuous_update=False), 
             j=widgets.IntSlider(100-start,0,sobel.shape[0]-1,1, continuous_update=False),
-            save=False
+            save=SAVEFIG
            )
 display(widget)
 # -
@@ -164,7 +161,7 @@ display(widget)
 # Step 5 of the algorithm
 weights, argmax = max_and_argmax(Corr)
 
-# Do actual computations; get a cup of coffee
+# Do actual computations; get a cup of coffee. If this takes to long, consider increasing stride to reduce the workload, at the cost of accuracy
 t = time.monotonic()
 W, DX_DY = calculate_halfmatrices(weights, argmax, fftsize=fftsize)
 print(time.monotonic()-t)
@@ -175,12 +172,12 @@ W_n = W / np.sqrt(w_diag.T*w_diag)
 
 # +
 # Plot W, DX and DY to pick a value for W_{min} (Step 7 of algorithm)
-def plot_masking(min_normed_weight, save=False):
+def plot_masking(min_normed_weight, save=SAVEFIG):
     extent = [start, stop, stop, start]
     fig, axs = plt.subplots(1, 3, figsize=(8, 2.5), constrained_layout=True)
     im = {}
-    im[0] = axs[0].imshow(Mc[0], cmap='seismic', extent=extent, interpolation='none')
-    im[1] = axs[1].imshow(Mc[1], cmap='seismic', extent=extent, interpolation='none')
+    im[0] = axs[0].imshow(DX_DY[0], cmap='seismic', extent=extent, interpolation='none')
+    im[1] = axs[1].imshow(DX_DY[1], cmap='seismic', extent=extent, interpolation='none')
     im[2] = axs[2].imshow(W_n - np.diag(np.diag(W_n)), cmap='inferno', 
                           extent=extent, clim=(0.0, None), interpolation='none')
     axs[0].set_ylabel('$j$')
@@ -210,14 +207,14 @@ def plot_masking(min_normed_weight, save=False):
 widget = interactive(plot_masking, 
                      min_normed_weight=widgets.FloatSlider(value=0.15, min=0., max=1, 
                                                       step=0.01, continuous_update=False),
-                     save=False
+                     save=SAVEFIG
                )
 display(widget)
 # -
 
 # Part two of step 7 of the algorithm
 min_norm = widget.result
-nr = np.arange(Wc.shape[0])*stride + start
+nr = np.arange(W.shape[0])*stride + start
 coords, weightmatrix, DX, DY, row_mask = threshold_and_mask(min_norm, W, DX_DY, nr)
 #Step 8 of the algorithm: reduce the shift matrix to two vectors of absolute shifts
 dx, dy = calc_shift_vectors(DX, DY, weightmatrix)
@@ -267,4 +264,4 @@ corrected.to_zarr(os.path.join(folder, name + '_driftcorrected.zarr'),
 
 #Or, although parallel access to HDF5 is hard, so go single process, save to hdf5
 with dask.config.set(scheduler='threads'):  
-    corrected.to_hdf5(folder + name + r'\driftCorrected.h5', '/stack')
+    corrected.to_hdf5(os.path.join(folder, name + '_driftCorrected.h5', '/Intensity')

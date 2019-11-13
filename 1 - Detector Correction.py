@@ -26,7 +26,7 @@ import os
 import dask.array as da
 from IPython.display import Markdown
 
-SAVEFIG = False
+SAVEFIG = True
 # -
 
 # ## Dark count
@@ -299,6 +299,3 @@ axs[1].legend()
 plt.tight_layout(h_pad=0.0, pad=0)
 if SAVEFIG:
     plt.savefig('HDRcomparison.pdf')
-# -
-
-

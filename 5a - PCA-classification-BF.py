@@ -47,6 +47,8 @@ bGreen = LinearSegmentedColormap.from_list('bGreen', ['black', to_niceRGB([0,1,0
 cmaps = [bRed, bGreen, bBlue]*2
 colors = [to_niceRGB([1,0,0]), to_niceRGB([0,1,0]), to_niceRGB([0,0,1])]*2
 
+SAVEFIG = True
+
 #cluster = LocalCluster(n_workers=3, threads_per_worker=4, memory_limit='10GB')
 client = Client()
 client
@@ -58,7 +60,7 @@ client
 # +
 tstart = time.time()
 dimensions = 6
-coarsen = 1
+coarsen = 5
 
 folder = r'./data'
 name = '20171120_160356_3.5um_591.4_IVhdr'
@@ -91,7 +93,7 @@ pipe_names = '_'.join(pipe.named_steps.keys())
 
 pipe.fit(coarseIVs)
 
-# To inspect what is a reasonable number of dimensions to reduce to, we create a _scree_ plot:
+# To determine a reasonable value for the number of dimensions to reduce to, we create a _scree_ plot:
 
 plt.figure(figsize=[3.5, 3.5])
 scree = np.concatenate([[0], pipe.named_steps['pca'].explained_variance_ratio_])
@@ -103,7 +105,8 @@ plt.axhline(0, color='black', alpha=0.5)
 plt.legend(fontsize='large', scatterpoints=3)
 plt.tight_layout()
 plt.ylim([None,1])
-plt.savefig(f'scree_plot_BF_{pipe_names}.pdf')
+if SAVEFIG:
+    plt.savefig(f'scree_plot_BF_{pipe_names}.pdf')
 f"{dimensions} PCA components explain {scree.sum():.4f} of the total variance"
 
 # The sign of the PCA vectors has a degeneracy dependent on the random initialization: minus a PCA vector explains as much variance as plus the vector, as we take a linear span.
@@ -153,7 +156,8 @@ for i in range(dimensions):
     axs[1,i].margins(x=0)
 axs[1,0].set_ylabel('Intensity')
 #plt.tight_layout()
-plt.savefig(f'BF_PCAcomponents_{pipe_names}.pdf')
+if SAVEFIG:
+    plt.savefig(f'BF_PCAcomponents_{pipe_names}.pdf')
 
 # ## Visualization
 #
@@ -173,14 +177,15 @@ img = img / img.max(axis=(0, 1), keepdims=True)
 ax2.imshow(to_niceRGB(img), interpolation='none')
 ax2.set_title('BF PCA component 4 to 6')
 #plt.tight_layout()
-plt.savefig(f'BF2_visualization_{pipe_names}.pdf')
+if SAVEFIG:
+    plt.savefig(f'BF2_visualization_{pipe_names}.pdf')
 # -
 
 # ## Clustering: $k$-means
 # To assign labels to different spectra, we cluster using a standard unsupervised machine learning algorithm: the $k$-means clustering algorithm:
 
 rIVs = rIVs.compute()
-kmeans_d = 6
+kmeans_d = 6 # number of PCA components to use in the k-means clustering
 
 # Optionally, calculate the silhouette score for different numbers of clusters and dimensions
 # to find an indication of a good choice of parameters
@@ -195,7 +200,7 @@ for n in klabels:
     print(f"{n} clusters, score = {scores[-1]}")
 plt.plot(klabels, scores)
 plt.ylabel('Silhoutte score')
-plt.xlabel('$n_{clusters}$')
+plt.xlabel('$n_{clusters}$');
 
 # Perform the actual clustering
 kmeans = KMeans(n_clusters=5, random_state=10, n_jobs=-1).fit(rIVs[:,:kmeans_d])
@@ -299,7 +304,8 @@ axs[3,0].set_ylabel(r'$y$ (pixels)')
     
 plt.tight_layout()
 print("Time elapsed: {}".format(time.time()-tstart))
-plt.savefig('clustering_BF_2_0_perp.pdf', dpi=600)
+if SAVEFIG:
+    plt.savefig('clustering_BF_2_0_perp.pdf', dpi=600)
 print("Total time elapsed: {}".format(time.time()-tstart))
 # -
 from mpl_toolkits.mplot3d import Axes3D 
@@ -381,7 +387,8 @@ axs[0,1].set_xlabel(r'$x$ (pixels)')
 axs[0,1].set_ylabel(r'$y$ (pixels)')
 plt.tight_layout()
 plt.subplots_adjust(left=0.05)
-plt.savefig('BF_clustering3D.pdf', dpi=600)
+if SAVEFIG:
+    plt.savefig('BF_clustering3D.pdf', dpi=600)
 plt.show()
 # -
 

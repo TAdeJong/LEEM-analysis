@@ -51,6 +51,8 @@ bGreen = LinearSegmentedColormap.from_list('bGreen', ['black', to_niceRGB([0,1,0
 cmaps = [bRed, bGreen, bBlue]*2
 colors = [to_niceRGB([1,0,0]), to_niceRGB([0,1,0]), to_niceRGB([0,0,1])]*2
 
+SAVEFIG=True
+
 client = Client()
 client
 
@@ -59,7 +61,7 @@ client
 
 """Do a principle component analysis on a stack of images and use this for clustering, both using Dask"""
 dimensions = 6
-coarsen = 1
+coarsen = 5
 
 # +
 folder = './data'
@@ -102,7 +104,8 @@ plt.axhline(0, color='black', alpha=0.5)
 plt.legend(fontsize='large', scatterpoints=3)
 plt.tight_layout()
 plt.ylim([None,1])
-plt.savefig(f'scree_plot_DF_{pipe_names}.pdf')
+if SAVEFIG:
+    plt.savefig(f'scree_plot_DF_{pipe_names}.pdf')
 f"{dimensions} PCA components explain {scree.sum():.4f} of the total variance"
 
 # The sign of the PCA vectors has a degeneracy dependent on the random initialization: minus a PCA vector explains as much variance as plus the vector, as we take a linear span.
@@ -150,7 +153,8 @@ for i in range(dimensions):
     axs[1,i].set_xlabel('$E_0$ (eV)')
     axs[1,i].margins(x=0)
 axs[1,0].set_ylabel('Intensity')
-plt.savefig(f'DF_PCAcomponents_{pipe_names}.pdf')
+if SAVEFIG:
+    plt.savefig(f'DF_PCAcomponents_{pipe_names}.pdf')
 
 # ## Visualization
 #
@@ -169,7 +173,8 @@ img = img - img.min(axis=(0, 1), keepdims=True)
 img = img / img.max(axis=(0, 1), keepdims=True)
 ax2.imshow(toniceRGB(img), interpolation='none')
 ax2.set_title('DF PCA component 4 to 6')
-plt.savefig(f'DF_visualization_{pipe_names}.pdf')
+if SAVEFIG:
+    plt.savefig(f'DF_visualization_{pipe_names}.pdf')
 # -
 
 # ## Clustering: $k$-means
@@ -294,8 +299,9 @@ axs[3,0].set_ylabel(r'$y$ (pixels)')
     
 plt.tight_layout()
 print("Time elapsed: {}".format(time.time()-tstart))
-plt.savefig('clustering_DF_2_0_perp.pdf', dpi=600)
-print("Total time elapsed: {}".format(time.time()-tstart))
+if SAVEFIG:
+    plt.savefig('clustering_DF_2_0_perp.pdf', dpi=600)
+    print("Total time elapsed: {}".format(time.time()-tstart))
 
 # +
 tstart = time.time()
@@ -347,6 +353,7 @@ axs[0].set_ylabel(r'$y$ (pixels)')
     
 plt.tight_layout()
 print("Time elapsed: {}".format(time.time()-tstart))
+if SAVEFIG:
 plt.savefig('clustering_DF_3_0.pdf', dpi=600)
 print("Total time elapsed: {}".format(time.time()-tstart))
 
