@@ -59,7 +59,7 @@ client
 
 """Do a principle component analysis on a stack of images and use this for clustering, both using Dask"""
 dimensions = 6
-coarsen = 5
+coarsen = 1
 
 # +
 folder = './data'
@@ -69,7 +69,9 @@ name = '20171120_215555_3.5um_583.1_IVhdr_DF2'
 Erange = slice(100, 410)
 x_slice = slice(442, 1380)
 y_slice = slice(92, 960)
-dset = da.from_zarr(os.path.join(folder, name + '_driftcorrected.zarr'))
+xdata = xr.open_dataset(os.path.join(folder, name +'_driftcorrected.nc'), 
+                        chunks={'x': 10 * coarsen, 'y': 10 * coarsen})
+dset = xdata.Intensity.data
 
 IVs = dset[Erange, x_slice, y_slice].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
 fullIVs = dset[:, x_slice, y_slice].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
@@ -78,7 +80,6 @@ IVs
 # -
 
 # Get metadata from netCDF file for plotting
-xdata = xr.open_dataset(os.path.join(folder, name +'_detectorcorrected.nc'))
 EGY = xdata.Energy_set
 multiplier = xdata.multiplier
 plt.plot(EGY, multiplier)
@@ -353,4 +354,7 @@ print("Time elapsed: {}".format(time.time()-tstart))
 if SAVEFIG:
 plt.savefig('clustering_DF_3_0.pdf', dpi=600)
 print("Total time elapsed: {}".format(time.time()-tstart))
+
+# -
+
 

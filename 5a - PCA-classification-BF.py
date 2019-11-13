@@ -67,7 +67,9 @@ Erange = slice(62, 460)
 #Erange = slice(62, 160) # Alternative range to only show layer count differences
 x_slice = slice(220, 1140)
 y_slice = slice(160, 1050)
-dset = da.from_zarr(os.path.join(folder, name + '_driftcorrected.zarr'))
+xdata = xr.open_dataset(os.path.join(folder, name +'_driftcorrected.nc'), 
+                        chunks={'x': 10 * coarsen, 'y': 10 * coarsen})
+dset = xdata.Intensity.data
 
 IVs = dset[Erange, x_slice, y_slice].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
 fullIVs = dset[:, x_slice, y_slice].rechunk(chunks=(-1, 10 * coarsen, 10 * coarsen))
@@ -77,8 +79,7 @@ IVs
 coarseIVs = IVs[:,::coarsen, ::coarsen].reshape((IVs.shape[0],-1)).T.persist()
 coarseIVs
 
-# Get metadata from netCDF file for plotting (Not saved in zarr of the driftcorrected)
-xdata = xr.open_dataset(os.path.join(folder, name +'_detectorcorrected.nc'))
+# Get metadata from netCDF file for plotting
 EGY = xdata.Energy_set
 multiplier = xdata.multiplier
 plt.plot(EGY, multiplier)
@@ -211,11 +212,7 @@ meanIVs = [da.nanmean(validIVs[:,clustering == index], axis=1)
            for index in range(kmeans.n_clusters)]
 
 # +
-tstart = time.time()
-print('plotting clustering data')
-
-
-fig2,axs = plt.subplots(2,4, figsize=[11,5], dpi=600)
+fig2, axs = plt.subplots(2,4, figsize=[11,5], dpi=600)
 #In case of 1 out of 1 columns figure
 axs = np.transpose(axs)
 
@@ -282,9 +279,8 @@ axs[3,0].imshow(clusteringimg.T,
 for i,v in enumerate(kmeans.cluster_centers_):
     axs[1,0].scatter(v[0], v[1], s=20, color=center_colors[i])
     axs[1,1].scatter(v[0], v[2], s=20, color=center_colors[i])
-print("Time elapsed: {}".format(time.time()-tstart))
+    
 meanIVs = da.compute(*meanIVs)
-print("Time elapsed: {}".format(time.time()-tstart))
 for i, meanIV in enumerate(meanIVs):
     axs[3,1].plot(xdata.Energy, (meanIV / multiplier), alpha=0.75)#, color=center_colors[i],)
 
@@ -301,10 +297,9 @@ axs[3,0].set_ylabel(r'$y$ (pixels)')
     #ax.tick_params(axis='y', labelright=True, labelleft=False)
     
 plt.tight_layout()
-print("Time elapsed: {}".format(time.time()-tstart))
+
 if SAVEFIG:
     plt.savefig('clustering_BF_2_0_perp.pdf', dpi=600)
-print("Total time elapsed: {}".format(time.time()-tstart))
 # -
 from mpl_toolkits.mplot3d import Axes3D 
 xx,yy = np.meshgrid(edges[0], edges[1])

@@ -89,8 +89,8 @@ fftsize=256 * 2 // 2
 z_factor = 1
 # -
 
-original = xr.open_dataset(os.path.join(folder, name + '_detectorcorrected.nc'), chunks={'time': dE})
-original = original.Intensity.data
+dataset = xr.open_dataset(os.path.join(folder, name + '_detectorcorrected.nc'), chunks={'time': dE})
+original = dataset.Intensity.data
 
 # For interactive use we can view the original data
 interactive(lambda n: plot_stack(original, n), 
@@ -255,7 +255,16 @@ interactive(lambda n: plot_stack(corrected, n, grid=True),
             n=widgets.IntSlider(corrected.shape[0]//4,0,corrected.shape[0]-1,1, continuous_update=False)
            ) 
 
-# Save the results to zarr
+# ## Saving data
+# Save the resulting data in a new netCDF file
+
+xrcorrected = dataset.reindex({'x': np.arange(0, dataset.x[1]*corrected.shape[1], dataset.x[1]), 
+                               'y': np.arange(0, dataset.y[1]*corrected.shape[2], dataset.y[1])})
+xrcorrected.Intensity.data = corrected
+xrcorrected.Intensity.attrs['DriftCorrected'] = 'True'
+xrcorrected.to_netcdf(os.path.join(folder, name + '_driftcorrected.nc'))
+
+# Or, save the results to zarr
 import zarr
 from numcodecs import Blosc
 compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
