@@ -194,7 +194,7 @@ for i,direction in enumerate(['x', 'y']):
     pltdat.loc[direction].max('n').min(dim='$\sigma$')
 
 for ax in axs:
-    ax.set_xlim([0,1.95])
+    ax.set_xlim([0, 1.95])
 for ax in axs[:4]:
     ax.set_ylim([0, 10.8])
 for ax in axs[4:]:
@@ -209,7 +209,6 @@ for ax in axs[::2]:
 axs[0].set_title("Max error")
 axs[2].set_title("Mean error")
 axs[4].set_title("Optimal error spread")
-    
 
 plt.savefig('simulation_error.pdf')
 # -

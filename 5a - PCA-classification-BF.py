@@ -33,7 +33,6 @@ import xarray as xr
 
 from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 
-
 def to_niceRGB(image):
     """Use basis colors as suggested by P. Kovesi http://arxiv.org/abs/1509.03700"""
     A = np.array([[0.90, 0.17, 0.00],
@@ -49,7 +48,7 @@ colors = [to_niceRGB([1,0,0]), to_niceRGB([0,1,0]), to_niceRGB([0,0,1])]*2
 
 SAVEFIG = True
 
-#cluster = LocalCluster(n_workers=3, threads_per_worker=4, memory_limit='10GB')
+#cluster = LocalCluster()
 client = Client()
 client
 # -
@@ -90,8 +89,7 @@ plt.plot(EGY, multiplier)
 pca = PCA(n_components=dimensions, whiten=True, random_state=4)
 pipe = make_pipeline(StandardScaler(), pca)
 pipe_names = '_'.join(pipe.named_steps.keys())
-
-pipe.fit(coarseIVs)
+pipe.fit(coarseIVs) # Fit the standard scaler and PCA vectors to the coarsened data
 
 # To determine a reasonable value for the number of dimensions to reduce to, we create a _scree_ plot:
 

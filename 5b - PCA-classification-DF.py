@@ -34,8 +34,6 @@ import time
 import os
 import xarray as xr
 
-from pyL5.lib.analysis.container import Container
-
 from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 
 def to_niceRGB(image):
@@ -91,8 +89,7 @@ plt.plot(EGY, multiplier)
 pca = PCA(n_components=dimensions, whiten=True, random_state=4)
 pipe = make_pipeline(StandardScaler(), pca)
 pipe_names = '_'.join(pipe.named_steps.keys())
-
-pipe.fit(coarseIVs)
+pipe.fit(coarseIVs) # Fit the standard scaler and PCA vectors to the coarsened data
 
 plt.figure(figsize=[3.5 ,3.5])
 scree = np.concatenate([[0], pipe.named_steps['pca'].explained_variance_ratio_])
@@ -165,13 +162,13 @@ fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=[6, 3], constrained_layout=True)
 img = rIVs[:, :3].reshape(IVs.shape[1:] + (3,)).swapaxes(0, 1)
 img = img - img.min(axis=(0, 1), keepdims=True)
 img = img / img.max(axis=(0, 1), keepdims=True)
-ax1.imshow(toniceRGB(img), interpolation='none')
+ax1.imshow(to_niceRGB(img), interpolation='none')
 ax1.set_title('DF PCA component 1 to 3')
 
 img = rIVs[:, 3:6].reshape(IVs.shape[1:] + (3,)).swapaxes(0, 1)
 img = img - img.min(axis=(0, 1), keepdims=True)
 img = img / img.max(axis=(0, 1), keepdims=True)
-ax2.imshow(toniceRGB(img), interpolation='none')
+ax2.imshow(to_niceRGB(img), interpolation='none')
 ax2.set_title('DF PCA component 4 to 6')
 if SAVEFIG:
     plt.savefig(f'DF_visualization_{pipe_names}.pdf')
@@ -220,9 +217,9 @@ color = rIVs[::coarse_2d,:3]
 center_colors = kmeans.cluster_centers_[:,:3] - color.min(axis=0)
 color = color - color.min(axis=0, keepdims=True)
 center_colors = center_colors / color.max(axis=0)
-center_colors = toniceRGB(center_colors)
+center_colors = to_niceRGB(center_colors)
 color = color / color.max(axis=0,keepdims=True)
-color = toniceRGB(color)
+color = to_niceRGB(color)
 
 newcmap = ListedColormap(center_colors)
 
