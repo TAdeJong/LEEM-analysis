@@ -45,7 +45,7 @@ sigmas = [3, 7, 9, 11, 13, 17]
 strides = np.array([35, 50, 70,])
 ts = [0,1,2,3,4]
 res = xr.DataArray(np.zeros((len(iters), len(sigmas), len(strides), len(ts))), 
-             coords={'i':iters, 'sigma': sigmas, 'strides': strides, 't': ts}, 
+             coords={'i':iters, 'sigma': sigmas, 'strides': strides.astype(np.int32), 't': ts}, 
              dims=['i','sigma', 'strides', 't'])
 res.coords
 

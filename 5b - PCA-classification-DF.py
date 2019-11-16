@@ -314,9 +314,9 @@ color = rIVs[::coarse_2d,:3]
 center_colors = kmeans.cluster_centers_[:,:3] - color.min(axis=0)
 color = color - color.min(axis=0, keepdims=True)
 center_colors = center_colors / color.max(axis=0)
-center_colors = toniceRGB(center_colors)
+center_colors = to_niceRGB(center_colors)
 color = color / color.max(axis=0,keepdims=True)
-color = toniceRGB(color)
+color = to_niceRGB(color)
 
 newcmap = ListedColormap(center_colors)
 
@@ -352,7 +352,7 @@ axs[0].set_ylabel(r'$y$ (pixels)')
 plt.tight_layout()
 print("Time elapsed: {}".format(time.time()-tstart))
 if SAVEFIG:
-plt.savefig('clustering_DF_3_0.pdf', dpi=600)
+    plt.savefig('clustering_DF_3_0.pdf', dpi=600)
 print("Total time elapsed: {}".format(time.time()-tstart))
 
 # -

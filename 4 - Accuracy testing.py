@@ -97,11 +97,14 @@ noise = da.random.normal(size=synthetic.shape, chunks=synthetic.chunks)
 # Create an xarray.DataArray to store the results
 As = np.arange(0., 4., 0.05)  # Noise amplitudes to calculate for
 sigmas = np.arange(0, 20, 0.25)  # Smoothing values to calculate for
-ns = np.arange(length)  # iteration over the datapoints / images, as we will save the found shift for each image.
+# iteration over the datapoints / images, as we will save the found shift for each image.
+# We specify np.int32 as opendap does not support int64
+ns = np.arange(length, dtype=np.int32) 
 direction = ['x', 'y']
 res = xr.DataArray(np.zeros((len(As), len(sigmas), 2, len(ns))), 
              coords={'A' : As, 's': sigmas, 'direction': direction, 'n': ns}, 
              dims=['A','s', 'direction', 'n'])
+res
 
 for A in As:
     noisedata = synthetic + A * noise
