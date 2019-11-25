@@ -1,6 +1,7 @@
 name: LEEM-analysis
 channels:
   - defaults
+  - conda-forge
 dependencies:
   - distributed
   - netcdf4
