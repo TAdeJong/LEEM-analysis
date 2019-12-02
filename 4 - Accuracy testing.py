@@ -94,6 +94,7 @@ def only_filter(images, sigma=11, mode='nearest'):
 da.random.seed(42)
 noise = da.random.normal(size=synthetic.shape, chunks=synthetic.chunks) 
 
+# + {"jupyter": {"outputs_hidden": true}}
 # Create an xarray.DataArray to store the results
 As = np.arange(0., 4., 0.05)  # Noise amplitudes to calculate for
 sigmas = np.arange(0, 20, 0.25)  # Smoothing values to calculate for
@@ -105,6 +106,7 @@ res = xr.DataArray(np.zeros((len(As), len(sigmas), 2, len(ns))),
              coords={'A' : As, 's': sigmas, 'direction': direction, 'n': ns}, 
              dims=['A','s', 'direction', 'n'])
 res
+# -
 
 for A in As:
     noisedata = synthetic + A * noise
@@ -215,4 +217,23 @@ axs[4].set_title("Optimal error spread")
 
 plt.savefig('simulation_error.pdf')
 # -
+noisedata = synthetic + 1. * noise
+sobel = only_filter(noisedata, sigma=5, mode='nearest')
+sobel = sobel - sobel.mean(axis=(1,2), keepdims=True)
+fig, axs = plt.subplots(ncols=3, figsize=[8,2.3])
+im = axs[2].imshow(sobel[0,...], origin='lower', cmap='gray')
+fig.colorbar(im, ax=axs[2])
+im = axs[1].imshow(noisedata[0,...], origin='lower', cmap='gray')
+fig.colorbar(im, ax=axs[1])
+for ax in axs[1:]:
+    ax.set_ylabel('y')
+    ax.set_xlabel('x')
+axs[0].plot(xshifts.squeeze(), label='x')
+axs[0].plot(yshifts.squeeze(), label='y')
+axs[0].set_ylabel('shift')
+axs[0].set_xlabel('index')
+axs[0].legend()
+plt.tight_layout()
+plt.savefig('Figure7.pdf')
+
 
