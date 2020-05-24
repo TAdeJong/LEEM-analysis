@@ -1,6 +1,9 @@
 # Quantitative Data Analysis for spectroscopic LEEM.
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3539538.svg)](https://doi.org/10.5281/zenodo.3539538)
 
+![Principal Components ANalysis](https://ars.els-cdn.com/content/image/1-s2.0-S0304399119302475-gr10.jpg)
+
+
 This repository contains the code to showcase the methods and algorithms presented in the paper 
 "[Quantitative analysis of spectroscopic Low Energy Electron Microscopy data: High-dynamic range imaging, drift correction and cluster analysis](https://doi.org/10.1016/j.ultramic.2019.112913)".
 
