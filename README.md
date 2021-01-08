@@ -22,5 +22,5 @@ The code makes extensive use of [`dask`](https://dask.org/) for lazy and paralle
 The data is available separately at http://doi.org/10.4121/uuid:7f672638-66f6-4ec3-a16c-34181cc45202 (via https://researchdata.4tu.nl/). The [zeroth notebook](0%20-%20Data-download.ipynb) facilitates easy download of all (or parts of) related data.
 
 
-## Acknowdledgements
+## Acknowledgements
 This work was financially supported by the [Netherlands Organisation for Scientific Research (NWO/OCW)](https://www.nwo.nl/en/science-enw) as part of the [Frontiers of Nanoscience (NanoFront)](https://www.universiteitleiden.nl/en/research/research-projects/science/frontiers-of-nanoscience-nanofront) program.
