@@ -2,9 +2,8 @@ import numpy as np
 import dask.array as da
 import dask
 from dask.delayed import delayed
-from dask.distributed import Client
 from scipy.optimize import least_squares
-from scipy.ndimage.interpolation import zoom, shift
+import scipy.ndimage as ndi
 from scipy.interpolate import interp1d
 import scipy.sparse as sp
 from skimage import filters
@@ -197,3 +196,36 @@ def only_filter(images, sigma=11, mode='nearest'):
     return result
 
 
+def register_stack(data, sigma=5, fftsize=256, dE=10, min_norm=0.15):
+    """Top level convenience function to register a stack of images.
+    Data should be a stack of images stacked along axis 0 in the form 
+    of a dask array. TODO: ensure this in code.
+    Quick and dirty function, should only be used for small stacks, as 
+    not all parameters are exposed, in particular strides/interpolation   
+    are unavailable.
+    """
+    sobel = crop_and_filter(data.rechunk({0:dE}), sigma=sigma, finalsize=2*fftsize)
+    sobel = (sobel - sobel.mean(axis=(1,2), keepdims=True)).persist()
+    corr = dask_cross_corr(sobel)
+    W, M = calculate_halfmatrices(*max_and_argmax(corr), fftsize=fftsize)
+    w_diag = np.atleast_2d(np.diag(W))
+    W_n = W / np.sqrt(w_diag.T*w_diag)
+    nr = np.arange(data.shape[0])
+    coords, weightmatrix, DX, DY, row_mask = threshold_and_mask(min_norm, W, M, nr)
+    dx, dy = calc_shift_vectors(DX, DY, weightmatrix)
+    shifts = np.stack(interp_shifts(coords, [dx, dy], n=data.shape[0]), axis=1)
+    neededMargins = np.ceil(shifts.max(axis=0)).astype(int)
+    shifts = da.from_array(shifts, chunks=(dE,-1))
+    @da.as_gufunc(signature="(i,j),(2)->(i,j)", output_dtypes=data.dtype, vectorize=True)
+    def shift_images(image, shifts):
+        """Shift `image` by `shift` pixels."""
+        return ndi.shift(image, shift=shifts, order=1)
+    padded = da.pad(data.rechunk({0:dE}), 
+                ((0, 0), 
+                 (0, neededMargins[0]), 
+                 (0, neededMargins[1])
+                ),
+                mode='constant'
+               )
+    corrected = shift_images(padded.rechunk({1:-1, 2:-1}), shifts)
+    return corrected, shifts
