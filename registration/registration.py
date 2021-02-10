@@ -199,11 +199,12 @@ def only_filter(images, sigma=11, mode='nearest'):
 def register_stack(data, sigma=5, fftsize=256, dE=10, min_norm=0.15):
     """Top level convenience function to register a stack of images.
     Data should be a stack of images stacked along axis 0 in the form 
-    of a dask array. TODO: ensure this in code.
+    of anything convertible to a dask array by `da.asarray()`.
     Quick and dirty function, should only be used for small stacks, as 
     not all parameters are exposed, in particular strides/interpolation   
     are unavailable.
     """
+    data = da.asarray(data)
     sobel = crop_and_filter(data.rechunk({0:dE}), sigma=sigma, finalsize=2*fftsize)
     sobel = (sobel - sobel.mean(axis=(1,2), keepdims=True)).persist()
     corr = dask_cross_corr(sobel)
