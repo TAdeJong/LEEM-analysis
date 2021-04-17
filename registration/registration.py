@@ -10,7 +10,9 @@ from skimage import filters
 import numba
 
 def filter_block(block, sigma, mode='nearest'):
-    """Perform Gaussian and Sobel filtering on a block of images"""
+    """Perform Gaussian and Sobel filtering on a block of images
+    TODO: replace with gaussian_gradient_magnitude as implemented in cupy, ndi and dask_image
+    """
     #return np.stack([GSfilter(block[i], sigma, mode) for i in range(block.shape[0])])
     return np.stack([GSfilter(image, sigma, mode) for image in block])
 
@@ -204,7 +206,7 @@ def register_stack(data, sigma=5, fftsize=256, dE=10, min_norm=0.15):
     not all parameters are exposed, in particular strides/interpolation   
     are unavailable.
     """
-    data = da.asarray(data)
+    data = da.asarray(data, chunks=(dE,-1,-1))
     sobel = crop_and_filter(data.rechunk({0:dE}), sigma=sigma, finalsize=2*fftsize)
     sobel = (sobel - sobel.mean(axis=(1,2), keepdims=True)).persist()
     corr = dask_cross_corr(sobel)
