@@ -1,0 +1,7 @@
+include README.md
+include LICENSE
+include requirements.txt
+graft registration
+recursive-exclude * *.py[co]
+include versioneer.py
+include registration/_version.py
