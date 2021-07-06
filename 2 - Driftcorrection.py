@@ -5,8 +5,8 @@
 #     text_representation:
 #       extension: .py
 #       format_name: light
-#       format_version: '1.4'
-#       jupytext_version: 1.2.4
+#       format_version: '1.5'
+#       jupytext_version: 1.5.0
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -41,8 +41,8 @@ from scipy.interpolate import interp1d
 
 from skimage import filters
 
-# Most relevant functions can be found in Registration.py
-from Registration import *
+# Most relevant functions can be found in registration
+from registration import *
 
 plt.rcParams["figure.figsize"] = [12., 8.]
 SAVEFIG = True
@@ -50,7 +50,7 @@ SAVEFIG = True
 
 cluster = LocalCluster(n_workers=1, threads_per_worker=8)
 client = Client(cluster)
-client.upload_file('Registration.py')
+client.upload_file('registration.py')
 client
 
 
