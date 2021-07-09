@@ -18,8 +18,10 @@ import scipy.sparse as ssp
 from .registration import *
 
 def qhist(data, quality, binbins=20, cmap='viridis', ax=None, bins=20):
-    """ A helper function to plot a histogram of data with the spread of quality
-    over the bins indicated by color."""
+    """A helper function to plot a histogram of data with the spread of quality
+    over the bins indicated by color.
+
+    """
     ds = 1/binbins
     binbin = np.arange(0,1,ds)
     cmapi = mpl.cm.get_cmap(cmap)
@@ -51,6 +53,24 @@ def find_maximum_spanning_tree(weights, nbs):
 
 
 def weights_and_neighbours(graph):
+    """Compute weight and neighbors matrices from graph
+
+    Parameters
+    ----------
+    graph : scipy.sparse.csr_matrix
+        sparse distance matrix representing an undirected graph
+
+    Returns
+    -------
+    weights : array_like (N,M)
+        corresponding weights for N nodes 
+        with M neighbors each
+    nbs : array_like int (N,M)
+        neighbors array corresponding to the same
+        as it would returned by
+        sklearn.neighbors.NearestNeighbors
+        for N nodes with M neighbors each
+    """
     wres = np.full((graph.shape[0], graph.getnnz(axis=1).max()), 0.)
     nbres = np.full((graph.shape[0], graph.getnnz(axis=1).max()), 0.)
     for i in range(graph.shape[0]):
@@ -61,6 +81,22 @@ def weights_and_neighbours(graph):
 
 
 def w_and_n_2_graph(weights, nbs):
+    """Convert weights and neighbors to a sparse graph format
+
+    Parameters
+    ----------
+    weights : array_like (N,M)
+        weights for N nodes with M neighbors each
+    nbs : array_like int (N,M)
+        neighbors array as returned by
+        sklearn.neighbors.NearestNeighbors
+        for N nodes with M neighbors each
+
+    Returns
+    -------
+    graph : scipy.sparse.csr_matrix
+        sparse distance matrix
+    """
     row_ind, col_ind = (nbs[:, [0]] * np.ones((1, nbs.shape[1]-1))).flatten(), nbs[:,1:].flatten()
     graph = ssp.csr_matrix((weights.flatten(), (row_ind, col_ind)), 
                            shape=[nbs.shape[0]]*2 )
@@ -100,7 +136,8 @@ def base_transformation_error(A, r, rprime, weights=1):
 
 
 
-def find_overlap_region(ref_image, image, estimate, mask=False, fftsize=256):
+def find_overlap_region(ref_image, image, estimate,
+                        mask=False, fftsize=256):
     d_ar = np.array(image.shape)
     # Put image inside boundaries of image
     e_clip = np.clip(estimate.astype(np.int), fftsize-d_ar, d_ar-fftsize)
@@ -149,6 +186,7 @@ def fft_region(image, estimate, mask=False, fftsize=256):
 
 @numba.njit()
 def n_fft_region(image, estimate, mask=False, fftsize=256):
+    """Numba JITted version of `fft_region`"""
     d_ar = np.array(image.shape)
     center = (np.floor(estimate) + d_ar)//2
     # Put image inside boundaries of image, Superfluous if check is in find_correction_and_w
@@ -198,7 +236,9 @@ def plot_match(i,j):
 def to_nn_diffvecs(coords, nn=None, n_neighbors=5):
     """Generate difference vectors for each coord
     with its n_neighbors nearest neighbors excluding itself
-    parameters:
+
+    Parameters
+    ----------
     coords: N*M array, N coordinates of M dimensions
     returns: 
     diff_vecs, N*(n_neighbors-1)*M array of difference

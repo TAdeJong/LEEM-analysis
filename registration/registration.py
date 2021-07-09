@@ -23,7 +23,8 @@ def GSfilter(image, sigma, mode):
 def crop_and_filter(images, sigma=11, mode='nearest', finalsize=256):
     """Crop images to finalsize and apply the filters.
     Cropping is initially with a margin of sigma,
-    to prevent edge effects of the filters."""
+    to prevent edge effects of the filters.
+    """
     cent = [dim//2 for dim in images.shape[1:]]
     halfsize = finalsize//2 + sigma
     result = images[:,(cent[0]-halfsize):(cent[0]+halfsize),
@@ -47,9 +48,21 @@ def dask_cross_corr(data):
     return Corr
 
 def max_and_argmax(data):
-    """Return the dask max and argmax of data along the last two axes,
-    which corresponds to the x and y dimensions
-    (uncomputed)
+    """Returns max and argmax along last two axes.
+
+    Last two axes should correspond to the x and y dimensions.
+
+    Parameters
+    ----------
+    data : dask array
+        data with at least 3 dimensions
+
+    Returns
+    -------
+    weights : dask array
+        max of `data` along the last two axes
+    argmax : dask array
+        argmax of `data` along the last two axes
     """
     # Slap out a dimension to nicely apply argmax and max
     flatData = data.reshape(data.shape[:-2]+(-1,))
@@ -61,8 +74,22 @@ def max_and_argmax(data):
     return weights, argmax
 
 def calculate_halfmatrices(weights, argmax, fftsize=128):
-    """Calculate the half matrices of the weights and the argmax
-    and reconstruct the full arrays as numpy arrays now."""
+    """Compute the half matrices of the weights and the argmax
+    and reconstruct the full arrays.
+
+    Parameters
+    ----------
+    weights : dask array
+    argmax : dask array
+    fftsize : int, default: 128
+
+    Returns
+    -------
+    Wc : numpy array
+        Computed weights, symmetric
+    Mc : numpy array
+        Computed locations of maxima
+    """
     # Calculate half of the matrices only, because we know it is antisymmetric.
     uargmax = da.triu(argmax, 1) # Diagonal shifts are zero anyway, so 1. Reconstruct after computation
 
@@ -83,11 +110,19 @@ def calculate_halfmatrices(weights, argmax, fftsize=128):
 def threshold_and_mask(min_normed_weight, W, Mc, coords): #=np.arange(Wc.shape[0])*stride + start):
     """Normalize the weights W, threshold to min_normed_weight and remove diagonal,
     reduce DX and DY to the columns and rows still containing weights.
-    Returns:
-    the indices of these columns in terms of original image indices
-    the thresholded weights
-    The reduced DX and DY.
-    The indices of these columns in terms of calculated arrays.
+
+    Returns
+    -------
+    coords : array_like
+        the indices of these columns in terms of original image indices
+    W_n_m : array_like
+        the thresholded weights
+    D_X_m : array_like
+        The reduced DX
+    D_Y_m : array_like
+        The reduced DY
+    row_mask : array_like
+        The indices of these columns in terms of calculated arrays.
     """
     #coords = np.arange(Wc.shape[0])*stride + start
     wcdiag = np.atleast_2d(np.diag(W))
@@ -105,19 +140,57 @@ def threshold_and_mask(min_normed_weight, W, Mc, coords): #=np.arange(Wc.shape[0
 
 def construct_jac(W):
     """Construct a sparse Jacobian matrix of the least squares problem 
-    from a weight matrix W. This Jacobian is independent of the position
-    vector dx as the problem is actually linear"""
-    n = W.shape[0]
-    i = np.arange(n)
-    j = i + n*i
-    data = np.ones(n)
-    A = sp.coo_matrix((data, (i, j)), shape=(n, n*n)).tocsr()
+    from a weight matrix.
+
+    This Jacobian is independent of the position
+    vector dx as the problem is actually linear
+
+    Parameters
+    ----------
+    W : array_like (N,N)
+        weight matrix
+
+    Returns
+    -------
+    sparse array (N, N*N)
+        Jacobian in compressed sparse row format
+    """
+    N = W.shape[0]
+    i = np.arange(N)
+    j = i + N*i
+    data = np.ones(N)
+    A = sp.coo_matrix((data, (i, j)), shape=(N, N*N)).tocsr()
     wsp = sp.csr_matrix(W)
     J = wsp.dot(A)
     J = J.reshape((n*n, n))
     return J - wsp.T.dot(A).reshape((n*n, n), order='F')
 
 def calc_shift_vectors(DX, DY, weightmatrix, wpower=4, lsqkwargs={}):
+    """From relative displacement matrices, compute absolute displacement
+    vectors.
+
+    Parameters
+    ----------
+    DX : array_like (N,N)
+        horizontal relative displacement matrix
+    DY : array_like (N,N)
+        vertical relative displacement matrix
+    weightmatrix : array_like (N,N)
+        weights for least sqaures minimization
+    wpower : int or float, default=4
+        weightmatrix is used to this power
+        (componentwise)
+    lsqkwargs : dict, default={}
+        keyword arguments to pass to calls of
+        `scipy.optimize.least_squares`
+
+    Returns
+    -------
+    dx : array (N,)
+        horizontal absolute shift vector
+    dy : array (N,)
+        vertical absolute shift vector
+    """
     wopt = weightmatrix**wpower
     @numba.jit(nopython=True, nogil=True)
     def err_func(x, result):
@@ -143,10 +216,19 @@ def interp_shifts(coords, shifts, n=None):
     """
     Interpolate shifts for all frames not in coords and create dask array
 
-    :param coords: coordinates for shifts
-    :param shifts: list of arrays to be interpolated
-    :param n: final length (original size)
-    :return: list of interpolated shifts
+    Parameters
+    ----------
+    coords : (N,)
+        coordinates for shifts
+    shifts : (d, N)
+        list of arrays to be interpolated
+    n : int or None, defaults=None
+        final length (original size)
+
+    Returns
+    -------
+    shifts_interp : (d, n)
+        array of interpolated shifts
     """
     if n is None:
         ns = np.arange(coords.min(),coords.max()+1)
@@ -158,7 +240,7 @@ def interp_shifts(coords, shifts, n=None):
                      kind='linear', assume_sorted=True, bounds_error=False)
         shifts_interp.append(f(ns))
     #shift = da.from_array(shift, chunks=(dE,1,1))
-    return shifts_interp
+    return np.array(shifts_interp)
 
 # def shift_block(images, shifts, margins=(0,0)):
 #     """Shift a block of images per image in the x,y plane by shifts[index].
@@ -188,8 +270,10 @@ def interp_shifts(coords, shifts, n=None):
 
 def only_filter(images, sigma=11, mode='nearest'):
     """Apply the filters.
+
     Cropped with a margin of sigma,
-    to prevent edge effects of the filters."""
+    to prevent edge effects of the filters.
+    """
     result = images.map_blocks(filter_block, dtype=np.float64, 
                                sigma=sigma, mode=mode)
     if sigma > 0:
@@ -200,7 +284,8 @@ def only_filter(images, sigma=11, mode='nearest'):
 
 def register_stack(data, sigma=5, fftsize=256, dE=10, min_norm=0.15):
     """Top level convenience function to register a stack of images.
-    Data should be a stack of images stacked along axis 0 in the form 
+
+    `data` should be a stack of images stacked along axis 0 in the form 
     of anything convertible to a dask array by `da.asarray()`.
     Quick and dirty function, should only be used for small stacks, as 
     not all parameters are exposed, in particular strides/interpolation   
