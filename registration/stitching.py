@@ -1,3 +1,4 @@
+"""Additional functions for stitching images together."""
 import numpy as np
 import dask.array as da
 from dask.delayed import delayed

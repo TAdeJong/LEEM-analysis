@@ -1,3 +1,4 @@
+"""Functions used for registering stacks of images, e.g. spectroscopic data"""
 import numpy as np
 import dask.array as da
 import dask
@@ -5,7 +6,7 @@ from dask.delayed import delayed
 from scipy.optimize import least_squares
 import scipy.ndimage as ndi
 from scipy.interpolate import interp1d
-import scipy.sparse as sp
+import scipy.sparse as ssp
 from skimage import filters
 import numba
 
@@ -165,8 +166,8 @@ def construct_jac(W):
     i = np.arange(N)
     j = i + N*i
     data = np.ones(N)
-    A = sp.coo_matrix((data, (i, j)), shape=(N, N*N)).tocsr()
-    wsp = sp.csr_matrix(W)
+    A = ssp.coo_matrix((data, (i, j)), shape=(N, N*N)).tocsr()
+    wsp = ssp.csr_matrix(W)
     J = wsp.dot(A)
     J = J.reshape((n*n, n))
     return J - wsp.T.dot(A).reshape((n*n, n), order='F')

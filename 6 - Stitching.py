@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # ---
 # jupyter:
 #   jupytext:
@@ -91,11 +92,6 @@ from registration.stitching import *
 
 # -
 
-PEEM = False
-folder = './data'
-name = '20191105_212845_5.7um_349.0_sweep-STAGE_X-STAGE_Y_closed_loop_DF'
-
-
 # To use this way, first start a dask-scheduler with some workers at the address, see http://docs.dask.org/en/latest/setup/cli.html
 # Otherwise client= Client() also works by default.
 cluster = LocalCluster(n_workers=1, threads_per_worker=6)
@@ -103,7 +99,14 @@ client = Client(cluster)
 client
 
 # ## Initializing the required data
-# From a container with both stage coordinates and images, and associated metadata.
+# From a container with both stage coordinates and images, and associated metadata. The data used to showcase here is not (yet) publicly available, but corresponds to the Dark Field data of twisted bilayer graphene in Fig. 2c of [Lisi, S., Lu, X., Benschop, T. et al. Observation of flat bands in twisted bilayer graphene. Nat. Phys. 17, 189–193 (2021).](https://doi.org/10.1038/s41567-020-01041-x).
+#
+# Please note: that figure corresponds to the results of an earlier, unreleased version, of this code.
+
+PEEM = False
+folder = './data'
+name = '20191105_212845_5.7um_349.0_sweep-STAGE_X-STAGE_Y_closed_loop_DF'
+
 
 container = xr.open_dataset(os.path.join(folder, name+'.nc'), chunks={'index': 1})
 container
