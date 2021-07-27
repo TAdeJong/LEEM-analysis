@@ -25,41 +25,45 @@
 #  1. Using the stage coordinates for each image, obtain a nearest neighbour graph with the nearest `n_neighbors` neighbouring images for each image.
 #  2. Obtain an initial guess for the transformation matrix between stage coordinates and pixel coordinates, by one of the following options:
 #   1. Copying a known transformation matrix from an earlier run of a comparable dataset.
-#   2. Manually overlaying some nearest neighbor images from the center of the dataset, either refining the estimate, or making a new eastimate for an unknown dataset
+#   2. Manually overlaying some nearest neighbour images from the centre of the dataset, either refining the estimate or making a new estimate for an unknown dataset
 #  3. Calculate an initial estimate of the pixel coordinates of the images by applying the corresponding transformation to the stage coordinates
 #  4. Apply a gaussian filter with width `sigma` to the original dataset and apply a magnitude sobel filter. Optionally scale down the images by an integer factor `z` in both directions to be able to reduce `fftsize` by the same factor, without reducing the sample area compared.
+# todo guido: I don't really understand your explanation of step 5.2: What do you mean with overlap of size fftsize*fftsize? Normally I would name fftsize for the number of pixels of a fft, but here it means the size of the part of the image of which you calculate the crosscorrelation? Step 5.3 is also abacadabra to me.
+
 #  5. Iterate the following steps until the calculated image positions have converged to within `sigma`:
 #   1. Obtain a nearest neighbour graph with per image the nearest `n_neighbors` neighbouring images from the current estimate of the pixel coordinates and calculate the difference vectors between each pair of nearest neighbours.
-#   2. For each pair of neighboring images: 
-#      1. Calculate the cross-correlation between areas estimated to be in the center of the overlap of size `fftsize*fftsize` of the filtered data. 
+#   2. For each pair of neighbouring images:
+#      1. Calculate the cross-correlation between areas estimated to be in the centre of the overlap of size `fftsize*fftsize` of the filtered data.
 #      If the estimated area is outside the valid area of the image defined by `mask`/`radius`, take an area as close to the intended area but still within the valid area as possible.
-#      2. Find the location of the maximum in the cross-correlation. This corresponds to the correction to the estimate of the difference vector between the correspondingimage position pair.
+#      2. Find the location of the maximum in the cross-correlation. This corresponds to the correction to the estimate of the difference vector between the corresponding image position pair.
 #      4. Calculate the weight of the match by dividing the maximum in the cross-correlation by the sqrt of the maximum of the auto-correlations.
 #   3. Compute a new estimate of the difference vectors by adding the found corrections. Reconvert to a new estimate of pixel coordinates by minimizing the squared error in the system of equations for the positions, weighing my modified weights, either:
 #      1. $w_{mod}= w - w_{min}$ for $w> w_{min}$, $w=0$ else, with w_min the maximum lower bound such that the graph of nearest neighbours with non-zero weights is still connected
 #      2. Only use the 'maximum spanning tree' of weights, i.e. minus the minimum spanning tree of minus the weights, such that only the $n$ best matches are used.
 #  6. (Optional) Refine the estimate of the transformation matrix, using all estimated difference vectors with a weight better than $w_{min est}$ and restart from step 3.
-#  7. Repeat step 4. and 5. until `sigma` is satisfactory small. Optional repeat a final time with the original data if the signal to noise of the original data permits.
-#  8. Select only the images for stitching where the average of the used weights (i.e. where $w > w_{min}$) is larger than $q_{thresh}$ for an appropiate value of $q_{thresh}$.
-#  9. (Optional) For those images, match the intensities by calculating the intensity ratios between the overlap areas of size `fftsize*fftsize` and perform a global optimization.
-#  10. Define a weighting mask, 1 in the center and sloping linearly to zero at the edges of the valid region, over a width of `bandwidth` pixels.
-#  11. Per block of output `blocksize*blocksize`, select all images that have overlap with the particular output block, multiply each by the weighting mask and shift each image appropriately. Divide by an equivalently shifted stack of weighting masks. As such information at the center of images gets prioritized, and transitions get smoothed.
+#  7. Repeat steps 4. and 5. until `sigma` is satisfactorily small. Optional repeat a final time with the original data if the signal to noise of the original data permits.
+#  8. Select only the images for stitching where the average of the used weights (i.e. where $w > w_{min}$) is larger than $q_{thresh}$ for an appropriate value of $q_{thresh}$.
+#  9. (Optional) Match the intensities of the images by:
+#   1. Copy from known intensity of the image in the multiplier column, or:
+#   2. By calculating the intensity ratios between the overlap areas of size `fftsize*fftsize` and perform a global optimization
+#  10. Define a weighting mask, 1 in the centre and sloping linearly to zero at the edges of the valid region, over a width of `bandwidth` pixels.
+#  11. Per block of output `blocksize*blocksize`, select all images that have overlap with the particular output block, multiply each by the weighting mask and shift each image appropriately. Divide by an equivalently shifted stack of weighting masks. As such information at the centre of images gets prioritized, and transitions get smoothed.
 #
 # ## Considerations
 #
-# For square grids with a decent amount of overlap, it makes sense to put `n_neighbors`  to 5 (including the image itself), however, for larger overlaps or datasets where an extra dimension is available (such as landing energy), it can be appropiate to increase the number of nearest neighbors to which each image is matched.
+# For square grids with a decent amount of overlap, it makes sense to put `n_neighbors`  to 5 (including the image itself), however, for larger overlaps or datasets where an extra dimension is available (such as landing energy), it can be appropriate to increase the number of nearest neighbours to which each image is matched.
 #
-# Parameters and intermediate results of the iteration are saved in an `xarray` and saved to disk for reproducability.
+# Parameters and intermediate results of the iteration are saved in an `xarray` and saved to disk for reproducibility.
 #
 #
 # ## Parallelization
 #
 # Using [`dask`](https://dask.org), the following steps are parallelized:
 #   
-# * step 5B , where each pair of images can be treated independently. In practice parallelization is eprformed over blocks of subsequent images with their nearest neighbours. 
-# This could be improved upon in two ways: firstly by treating each pair only once, and secondly by making a nicer selection of blocks of images located close to eachother in the nnb graph. This would most likely require another (smarter) data structure than the nearest neighbour indexing matrix used now.
-# * Step 6 is actually quite analogous to 5B and is parallelized similarly.
-# * Step 11 is parallelized on a per block basis. To optimize memory usage, results are directly streamed to a `zarr` array on disk.
+# * step 5B , where each pair of images can be treated independently. In practice, parallelization is performed over blocks of subsequent images with their nearest neighbours.
+# This could be improved upon in two ways: firstly by treating each pair only once, and secondly by making a nicer selection of blocks of images located close to each other in the nearest neighbour graph. This would most likely require another (smarter) data structure than the nearest neighbour indexing matrix used now.
+# * Step 6 is quite analogous to 5B and is parallelized similarly.
+# * Step 11 is parallelized on a per-block basis. To optimize memory usage, results are directly streamed to a `zarr` array on disk.
 # * The minimizations are parallelized by scipy natively.
 #   
 
@@ -68,7 +72,12 @@ import time
 import os
 import datetime
 import matplotlib.pyplot as plt
-import matplotlib
+import matplotlib #  TODO: (Guido) Perhaps clean up these matplotlib imports
+from matplotlib.path import Path
+from matplotlib.patches import PathPatch
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from matplotlib.collections import PatchCollection
+import matplotlib.patches as mpatches
 import datetime
 
 import numpy as np
@@ -103,13 +112,13 @@ client
 #
 # Please note: that figure corresponds to the results of an earlier, unreleased version, of this code.
 
-PEEM = False
+PEEM = False  # PEEM data does not fill the images completely, so a different mask is used.
 folder = './data'
 name = '20191105_212845_5.7um_349.0_sweep-STAGE_X-STAGE_Y_closed_loop_DF'
 
 
 container = xr.open_dataset(os.path.join(folder, name+'.nc'), chunks={'index': 1})
-container
+container #  TODO: (Guido) perhaps explain the structure here. What is data/index/multipliers?
 
 
 stagecoords = container.stagecoords.data.compute()
@@ -140,36 +149,30 @@ def plot_stack(images, n):
     For interactive use with ipython widgets"""
     im = images[n, :, :].compute()
     plt.figure(figsize=[12,12])
-    plt.imshow(im.T, cmap='inferno')#, vmax=im.mean()*2)
+    plt.imshow(im.T, cmap='inferno', vmax=np.quantile(im, maxq), vmin=np.quantile(im, minq))
     plt.show()
     
-interactive(lambda n: plot_stack(data, n), 
+interactive(lambda n: plot_stack(data, n, minq=0.1, maxq=0.99),
             n=widgets.IntSlider(1, 0, data.shape[0]-1, 1, continuous_update=False)
-           ) 
+           )
+
 # -
 
 # ## Optional: discard dark images
 #
-# Too dark images (e.g. Si substrate next to vdW flakes), will only take up computation time and distort results, so we can crop them out in the next two cells
+# Too dark images (e.g. Si substrate next to vdW flakes), will only take up computation time and distort results, so we can crop them out in the next two cells.
 
 # +
-base_extent = np.array([-dims[1]//2,dims[1]//2,-dims[2]//2, dims[2]//2])
 Is = np.nanmax(np.where(mask, data, np.nan), axis=(1,2)) / multipliers
 Is = Is.compute()
 
 def I_mask_plot(ratio=3.5):
-    I_mask = []
     fig, ax = plt.subplots(figsize=[4*2,8])
     I_thresh = Is.max() / ratio
-    lsc = stagecoords
-    scat1 = ax.scatter(*lsc[:,Is >= I_thresh], 
-                c=Is[Is>=I_thresh], vmin=0, vmax=Is.max())
-    scat2 = ax.scatter(*lsc[:,Is<I_thresh], c=Is[Is<I_thresh], 
-               vmin=0, vmax=Is.max(), marker='x')
+    scat1 = ax.scatter(*stagecoords[:,Is >= I_thresh], c=Is[Is>=I_thresh], vmin=0, vmax=Is.max())
+    scat2 = ax.scatter(*stagecoords[:,Is<I_thresh], c=Is[Is<I_thresh], vmin=0, vmax=Is.max(), marker='x')
 
-    #for i,im in enumerate(data):
-    #    plt.annotate(str(i), stagecoords[:,i])
-    I_mask= (Is >= I_thresh)
+    I_mask = (Is >= I_thresh)
     plt.colorbar(scat1, ax=ax)
     ax.set_aspect('equal')
     return I_mask
@@ -190,7 +193,7 @@ multipliers = multipliers[I_mask]
 # Initialize the output xarray containing all the metadata of the progress.
 
 center = np.mean(stagecoords, axis=1)
-fftsize = 256*4 // 2
+fftsize = 256*4 // 2 # Todo (Guido): ???
 n_neighbors = 1 + 4 # sklearn nearest neighbors includes the point itself
 
 output = xr.Dataset(
@@ -208,7 +211,7 @@ output.attrs["scriptversion"] = 'v10'
 output.attrs["center"] = center
 output
 
-# ## Finding the initial nearest neighbors 
+# ## 1. Finding the initial nearest neighbors
 # For a simple square lattice with minimal overlap, the number of nearest neighbors is $4+1$, i.e. the image itself and it's horizontal and vertical neighbors. For larger overlaps or overlays, a larger number of neighbors may be specified.
 
 nbrs = NearestNeighbors(n_neighbors=n_neighbors, algorithm='kd_tree').fit(stagecoords.T)
@@ -216,7 +219,7 @@ nn = nbrs.kneighbors(stagecoords.T, return_distance=False)
 output["nnbs"] = (("iteration", "indices", "neighbor_no"), [nn])
 
 # +
-
+# cropping to a small amount of images to calculate initial transformation matrix
 if PEEM:
     r = 0.05
 else:
@@ -226,6 +229,8 @@ cropindices, = np.where((np.abs(stagecoords[0]-center[0]) < r)
 cropnbrs = NearestNeighbors(n_neighbors=n_neighbors, algorithm='kd_tree').fit(stagecoords[:,cropindices].T)
 cropstagecoords = stagecoords[:,cropindices]
 cnb = cropnbrs.kneighbors(cropstagecoords.T, return_distance=False).squeeze()
+
+# +
 
 fig, axs = plt.subplots(ncols=3, figsize=(15,6.5))
 
@@ -284,12 +289,12 @@ FoV
 #Either use this to manually overlap two images, or go down to try all four sides
 
 #centerindex = np.argmin(np.linalg.norm(cropstagecoords.T-center, axis=1))
-centerindex = np.argmin(np.abs(cropindices-27))
+centerindex = np.argmin(np.abs(cropindices-27)) # TODO: (Guido) This part of the code always messes me up and it doesn't let me select an index of my choosing.
 data[cropindices[centerindex]].persist()
 matchdata = data[cropindices[cnb[centerindex]]]
 vmax = np.nanmax(matchdata)
 print(cropindices[centerindex])
-z = 10
+z = 10 # Zoom factor
 def plotoverlayshift(dx, dy, matchindex=2):
     fig, axs = plt.subplots(ncols=1, figsize=[15,15])
 
@@ -297,7 +302,7 @@ def plotoverlayshift(dx, dy, matchindex=2):
     #axs.imshow(np.where(mask, data[cropindices][centerindex], 0).T, vmax=vmax, origin='lower')
     axs.imshow(np.where(mask, matchdata[0], 0).T, vmax=vmax, origin='lower')
     #s = shift(np.where(mask, data[cropindices][match], 0), (z*dx,z*dy))
-    s = shift(np.nan_to_num(matchdata[matchindex]), (z*dx,z*dy))
+    s = shift(np.nan_to_num(matchdata[matchindex]), (z*dx,z*dy))  #  TODO: (Guido) It is a bit unclear where this shift is imported from.
     axs.annotate(str(cropindices[match]), (640+z*dx, 512+z*dy))
     axs.imshow(s.T, cmap='inferno', vmax=vmax, zorder=2, origin='lower', alpha=0.6,)
     return np.array([z*dx, z*dy]), match
@@ -320,6 +325,7 @@ widget2 = interactive(plotoverlayshift,
 display(widget2)
 # -
 
+# Todo: (Guido) explain what these variables are
 S, P = np.empty((2,2)), np.empty((2,2))
 matchindex = [0,0]
 P[:,0], matchindex[0] = widget.result
@@ -344,8 +350,6 @@ cpc = A_calc@(cropstagecoords- cropstagecoords.mean(axis=1, keepdims=True))
 # We plot some images from the center with their approximate positions to check if everything makes sense.
 
 # +
-from matplotlib.path import Path
-from matplotlib.patches import PathPatch
 def vertices_from_mask(mask, coarsen):
     lmask = np.pad(mask,1)
     fig = plt.figure()
@@ -399,15 +403,15 @@ ax.set_ylim(ylim + base_extent[2:]);
 
 # ## Step 3: Calculate approximate pixel coordinates from linear transformation
 
-data = data/data.mean(axis=0).compute()
+data = data/data.mean(axis=0).compute() # TODO: (Guido) What does this do?
 
+# TODO: (Guido) Explain here that we are going to iterate to improve pc
 sc = -A_calc @ (stagecoords - center[:,np.newaxis]) #stage-based coordinates in pixels
 pc = sc.copy()
 
 # +
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from matplotlib.collections import PatchCollection
-import matplotlib.patches as mpatches
+
+# TODO: (Guido) This cell can be cleaned up...
 color = plt.cm.nipy_spectral(np.linspace(0, 1, pc.shape[1]))
 
 
@@ -441,6 +445,7 @@ for i,e in enumerate(e_clip):
 plt.show()
 
 # +
+# TODO: (Guido) You might want to make this into a function to be used in the cell where the iteration takes place. At this point the two scatters always overlap
 fig,ax = plt.subplots(figsize=[6,6])
 base_extent = np.array([-dims[1]//2,dims[1]//2,-dims[2]//2, dims[2]//2])
 ax.scatter(*pc, c=np.arange(pc.shape[1]), cmap='nipy_spectral', zorder=5)
@@ -459,17 +464,16 @@ output['sigma'] = (['iteration'], [0])
 output['z'] = (['iteration'], [0])
 output['weights'] = (['iteration', 'index', 'neighbor_no'], np.zeros((1,len(output.index), n_neighbors)))
 
-# ## Step 5: Calculating cross-correlations and optimizing positions
-#
 
 # +
 sigma = 8 # usualy 24 is a good value to start, squeezing down to ~4 in the end
 z = 4
 
+maskeddata = np.where(mask, data, np.nan) # (Guido): You need to take a mask here first, and then calculate sobel
 if sigma != 0:
-    sobel = da.nan_to_num(only_filter(data, sigma=sigma))
+    sobel = da.nan_to_num(only_filter(maskeddata, sigma=sigma))
 else:
-    sobel = data
+    sobel = maskeddata
 if z != 1:
     sobel = da.coarsen(np.mean, sobel, axes={1:z,2:z})
 
@@ -486,6 +490,9 @@ interactive(lambda n: plot_stack(sobel, n),
            ) 
 
 # +
+# ## Step 5: Calculating cross-correlations and optimizing positions
+# This is where the actual iteration takes place. Todo: Explain what parameters to choose and how to see if you are converging right. It can't hurt to insert more inline comments on what you do in particular. I still don't really understand what happens here in the code.
+
 res = {'x': None, 'y': None}
 
 max_iter = 2
@@ -612,6 +619,7 @@ plt.scatter(ldat.pc.sel(direction='x'), ldat.pc.sel(direction='y'), c=ldat.weigh
 # ## (Optional) Step 6: Refine transformation based on best matches
 #
 # Pick an appropriate threshold for matches to use `w_lim` (usually about 0.9 is good). Compare the new linear transformation `A_prime` with `A_calc`  used before. If significantly different, run the cell below to make `A_prime` the new transformation, and continue back at step 3.
+# Todo: (Guido) Also no idea how I should interpret A_calc and A_prime graphs here
 
 # +
 w_lim = 0.7
@@ -650,16 +658,19 @@ print(np.abs(red_dr.reshape((-1,2)).T - (A_calc @ red_sc.reshape((-1,2)).T)).mea
 with np.printoptions(precision=2):
     print(A_prime, A_calc, A_prime/A_calc, sep='\n')
 # -
+## 7. Repeat step 4. and 5. until sigma is satisfactory small.
+# Run this cell to copy the refined transformation and start again at step ? ...
 
 A_calc = A_prime.copy()
 plt.scatter(*pc, c=np.arange(sc.shape[1]), cmap='nipy_spectral',  zorder=5, linewidths=1, edgecolors='black')
 plt.scatter(*(-A_prime@(stagecoords-center[:,np.newaxis])), c=np.arange(sc.shape[1]), cmap='nipy_spectral', zorder=5, marker='x')
 sc = -A_calc @ (stagecoords - center[:,np.newaxis])
 pc = sc.copy()
-print("Now restart step 5")
 
+## 8. Selection of images to use
 
 # ### Defining the weighting mask
+# todo: explain edgewidth, shape of circ and bandwidth
 
 # +
 def gen_weight_mask(datashape, radius=610, edgewidth=200):
@@ -705,19 +716,31 @@ plt.xlabel('q')
 plt.ylabel('Number of images')
 
 # +
-#TODO: make nice widget to select q_thresh
-q_thresh = 0.4
+def select_q_thresh(q_thresh):
+    msk = get_quality_mask(0,q_thresh)
+    c = np.average(w_calc, axis=1, weights=w_calc>=w_min)
+    plt.figure(clear=True)
+    plt.scatter(*np.where(msk, pc, np.nan), c=c, cmap='inferno', zorder=5, vmax=1, vmin=w_min)
+    plt.scatter(*np.where(msk, np.nan, pc), c=c, cmap='inferno', zorder=5, marker='x', vmax=1, vmin=w_min)
+    plt.colorbar()
+    return q_thresh
 
-plt.scatter(*np.where(get_quality_mask(0, q=q_thresh), pc, np.nan), 
-            c=np.average(w_calc, axis=1, weights=w_calc>=w_min),  cmap='inferno',
-            zorder=5, vmax=1, vmin=w_min)
-plt.scatter(*np.where(get_quality_mask(0, q=q_thresh), np.nan, pc), 
-            c=np.average(w_calc, axis=1, weights=w_calc >= w_min),  cmap='inferno',
-            zorder=5, marker='x', vmax=1, vmin=w_min)
-plt.colorbar()
+widget = interactive(select_q_thresh,
+                     q_thresh=widgets.FloatSlider(value=0.9,min=0,max=1,step=0.01, continuous_update=False))
+display(widget)
+# +
+q_thresh = widget.result
+
 # -
 
-# ## (Optional) Step 9: Matching the image intensities.
+# ## (Optional) Step 9B Matching the image intensities
+# By using the multiplier from container
+# This method prevents intensity variation within the beam to propagate to the full span of the image.
+
+rel_intens = multipliers
+
+# ## (Optional) Step 9A: Matching the image intensities.
+# Guido: I don't really understand why not always use 9A. 9B is quite slow. In any case, I didn't really use/read this code.
 
 # +
 rel_intens = np.ones_like(multipliers)
@@ -744,7 +767,7 @@ Iopt_weight = np.where(w_calc[qmask, :4] > w_min - 0.001,
                        w_calc[qmask, :4], 
                        0)**4
 res_I = minimize(error_func, 
-                  np.zeros((qmask).sum()), 
+                  np.zeros(qmask.sum()),
                   args=(nn[:,1:], 
                         Iopt_weight, 
                         np.log(region_ratios))
@@ -759,11 +782,6 @@ plt.colorbar(im, ax=axs)
 print(res_I.message)
 # -
 
-# ## Alternative step 9: use multiplier from container
-# This method prevents intensity variation within the beam to propagate to the full span of the image.
-
-rel_intens = multipliers
-
 # Add metadata and write metadataoutput to disk
 output.attrs["q_thresh"] = q_thresh
 output["multiplier"] = ("index", rel_intens)
@@ -775,7 +793,7 @@ output.to_netcdf(os.path.join(folder,name+'stitchdata-'+output.attrs["timestamp"
 # First we calculate the edges of the blocks and which images fall in which block.
 
 # +
-bsize = 1280
+bsize = 1280 # I think you killed some type of kitten here :(
 
 xedges = np.arange(np.floor(pc[0].min()), pc[0].max() + data.shape[1], bsize)[::-1]
 xmask = np.abs((xedges[:, np.newaxis] - bsize//2) - pc[0]) <  dims[1] + bsize//2
