@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+message: "If you find this software useful and use it in scientific work, please cite it as below."
+authors:
+- family-names: "de Jong"
+  affiliation: "Leiden Institute of Physics"
+  given-names: "Tobias A."
+  orcid: "https://orcid.org/0000-0002-5211-8081"
+title: "TAdeJong/LEEM-analysis"
+version: 0.2.0
+doi: 10.5281/zenodo.3539538
+license: MIT
+date-released: 2021-08-19
+repository-code: "https://github.com/TAdeJong/LEEM-analysis"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "de Jong"
+    given-names: "Tobias A."
+    orcid: "https://orcid.org/0000-0002-5211-8081"
+  - family-names: "Kok"
+    given-names: "David N.L."
+    orcid: "https://orcid.org/0000-0002-5227-6880"
+  - family-names: "van der Torren"
+    given-names: "A.J.H."
+  - family-names: "Schopmans"
+    given-names: "H."
+  - family-names: "Tromp"
+    given-names: "R.M."
+  - family-names: "van der Molen"
+    given-names: "Sense Jan"
+    orcid: "https://orcid.org/0000-0003-3181-2055"
+  - family-names: "Jobst"
+    given-names: "Johannes"
+    orcid: "https://orcid.org/0000-0002-2422-1209"
+  doi: "10.1016/j.ultramic.2019.112913"
+  journal: "Ultramicroscopy"
+  month: 6
+  start: 112913 # First page number
+  title: "Quantitative analysis of spectroscopic low energy electron microscopy data: High-dynamic range imaging,  drift correction and cluster analysis"
+  issue: 1
+  volume: 213
+  year: 2020
