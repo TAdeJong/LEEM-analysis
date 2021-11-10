@@ -169,8 +169,8 @@ def construct_jac(W):
     A = ssp.coo_matrix((data, (i, j)), shape=(N, N*N)).tocsr()
     wsp = ssp.csr_matrix(W)
     J = wsp.dot(A)
-    J = J.reshape((n*n, n))
-    return J - wsp.T.dot(A).reshape((n*n, n), order='F')
+    J = J.reshape((N*N, N))
+    return J - wsp.T.dot(A).reshape((N*N, N), order='F')
 
 
 def calc_shift_vectors(DX, DY, weightmatrix, wpower=4, lsqkwargs={}):
