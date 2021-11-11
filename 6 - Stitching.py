@@ -8,7 +8,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.5.0
+#       jupytext_version: 1.12.0
 #   kernelspec:
 #     display_name: Python [conda env:LEEM-analysis]
 #     language: python
@@ -431,6 +431,10 @@ pc = sc.copy()
 # +
 color = plt.cm.nipy_spectral(np.linspace(0, 1, pc.shape[1]))
 
+estimates = pc.T[nn[70]] - pc.T[70]
+estimates = estimates[1:]
+d_ar = np.array(data[70].shape)
+e_clip = np.clip(estimates.astype(np.int), fftsize-d_ar, d_ar-fftsize)
 
 pathpatches = [pathpatch_from_mask(mask.T, coord-np.array(dims[1:])//2, c
                                    oarsen=50, facecolor=color[i], 
