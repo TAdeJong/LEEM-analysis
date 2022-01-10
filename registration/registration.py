@@ -300,14 +300,34 @@ def register_stack(data, sigma=5, fftsize=256, dE=10, min_norm=0.15):
     Quick and dirty function, should only be used for small stacks, as
     not all parameters are exposed, in particular strides/interpolation
     are unavailable.
+
+    Parameters
+    ----------
+    data : array_like, (N x m x k)
+        stack of N images
+    sigma : int
+        width of the gaussian filter
+    fftsize : int
+        size of FFTs to use. powers of 2 are preferred
+    dE : int
+        blocksize of computation.
+    min_norm: float
+        minimum normalized weight to use
+
+    Returns
+    -------
+    corrected: dask array
+        dask array of the shifted/corrected images
+    shifts: (Nx2) dask array
+        array of the computed shifts
     """
     data = da.asarray(data, chunks=(dE, -1, -1))
     sobel = crop_and_filter(data.rechunk({0: dE}), sigma=sigma, finalsize=2*fftsize)
     sobel = (sobel - sobel.mean(axis=(1, 2), keepdims=True)).persist()
     corr = dask_cross_corr(sobel)
     W, M = calculate_halfmatrices(*max_and_argmax(corr), fftsize=fftsize)
-    w_diag = np.atleast_2d(np.diag(W))
-    W_n = W / np.sqrt(w_diag.T*w_diag)
+    #w_diag = np.atleast_2d(np.diag(W))
+    #W_n = W / np.sqrt(w_diag.T * w_diag)
     nr = np.arange(data.shape[0])
     coords, weightmatrix, DX, DY, row_mask = threshold_and_mask(min_norm, W, M, nr)
     dx, dy = calc_shift_vectors(DX, DY, weightmatrix)
@@ -328,3 +348,84 @@ def register_stack(data, sigma=5, fftsize=256, dE=10, min_norm=0.15):
                     )
     corrected = shift_images(padded.rechunk({1: -1, 2: -1}), shifts)
     return corrected, shifts
+
+
+def strided_register(data, sigma=5, fftsize=256, stride=10, min_norm=0.15, start=0):
+    """Top level convenience function for large stacks of images
+
+    Instead of calculating the full matrix of all combinations of images,
+    only computes a band of between stride and 2*stride nearest neighbors
+    to enable a linear in the number of images computation.
+
+    Parameters
+    ----------
+    data : array_like, (N x m x k)
+        stack of N images
+    sigma : int
+        width of the gaussian filter
+    fftsize : int
+        size of FFTs to use. powers of 2 are preferred
+    stride : int
+        blocksize of computation. For each image 3*stride neighbors are considered:
+        at least stride before and after, at most 2*stride
+    min_norm: float
+        minimum normalized weight to use
+    start : int
+        First image in the stack to consider for registering.
+        All images before `start` will be shifted to the same position
+        as the first image considered.
+
+
+    Returns
+    -------
+    corrected: dask array
+        dask array of the shifted/corrected images
+    shifts: (Nx2) dask array
+        array of the computed shifts
+    W_full: (NxN) numpy array
+        computed weights
+    M_full: (2xNxN) numpy array
+        computed relative shifts
+    """
+    dE = stride
+    data = da.asarray(data, chunks=(dE, -1, -1))
+    nr = np.arange(start, data.shape[0])
+    sobel = crop_and_filter(data.rechunk({0: dE}), sigma=sigma, finalsize=2*fftsize)
+    sobel = (sobel - sobel.mean(axis=(1, 2), keepdims=True))#.persist()
+    W_full = np.zeros((data.shape[0],
+                       data.shape[0]))
+    M_full = np.zeros((2, data.shape[0],
+                          data.shape[0]))
+    outer_stride = 2*stride
+    for i in np.arange(start, data.shape[0], stride):
+        print(i, end=' ')
+        i2 = i + outer_stride
+        corr = dask_cross_corr(sobel[i:i2]) #Todo: only compute every block once.
+        W, M = calculate_halfmatrices(*max_and_argmax(corr),
+                                      fftsize=fftsize)
+        W_full[i:i2, i:i2] = W
+        M_full[:, i:i2, i:i2] = M
+        #w_diag = np.atleast_2d(np.diag(W))
+        #W_n = W / np.sqrt(w_diag.T * w_diag)
+    coords, weightmatrix, DX, DY, row_mask = threshold_and_mask(min_norm,
+                                                                W_full[start:,start:],
+                                                                M_full[:,start:,start:],
+                                                                nr)
+    dx, dy = calc_shift_vectors(DX, DY, weightmatrix)
+    shifts = np.stack(interp_shifts(coords, [dx, dy], n=data.shape[0]), axis=1)
+    neededMargins = np.ceil(shifts.max(axis=0)).astype(int)
+    shifts = da.from_array(shifts, chunks=(dE, -1))
+
+    @da.as_gufunc(signature="(i,j),(2)->(i,j)", output_dtypes=data.dtype, vectorize=True)
+    def shift_images(image, shifts):
+        """Shift `image` by `shift` pixels."""
+        return ndi.shift(image, shift=shifts, order=1)
+    padded = da.pad(data.rechunk({0: dE}),
+                    ((0, 0),
+                     (0, neededMargins[0]),
+                     (0, neededMargins[1])
+                     ),
+                    mode='constant'
+                    )
+    corrected = shift_images(padded.rechunk({1: -1, 2: -1}), shifts)
+    return corrected, shifts, W_full, M_full
