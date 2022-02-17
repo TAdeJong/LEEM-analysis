@@ -97,8 +97,14 @@ interactive(lambda n: plot_stack(original, n),
             n=widgets.IntSlider(original.shape[0]//2, 0, original.shape[0]-1, 1, continuous_update=False)
            ) 
 
+# Get extent, by any means necessary. Example with center and square of fftsize
+center = [dim//2 for dim in original.shape[1:]]
+extent = (center[0]-fftsize, center[0]+fftsize, center[1]-fftsize, center[1]+fftsize)
+fftsize = max(extent[1]-extent[0], extent[3]-extent[2]) //2 # used in calc half matrices
+
 # Step 1 to 3 of the algorithm as described in section 4 of the paper.
-sobel = crop_and_filter(original[Eslice,...].rechunk({0:dE}), sigma=3, finalsize=2*fftsize)
+sobel = Reg.crop_and_filter_extent(original[Eslice, ...].rechunk({0: dE}), extent, sigma=sigma)
+#sobel = crop_and_filter(original[Eslice,...].rechunk({0:dE}), sigma=3, finalsize=2*fftsize)
 sobel = (sobel - sobel.mean(axis=(1,2), keepdims=True)) #.persist()  
 sobel
 
