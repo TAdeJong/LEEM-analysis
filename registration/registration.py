@@ -39,6 +39,16 @@ def crop_and_filter(images, sigma=11, mode='nearest', finalsize=256):
         result = result[:, sigma:-sigma, sigma:-sigma]
     return result
 
+def crop_and_filter_extent(images, extent, sigma=11, mode='nearest'):
+    """Crop images to extent chosen and apply the filters. Cropping is initially with a margin of sigma,
+    to prevent edge effects of the filters. extent = minx,maxx,miny,maxy of ROI"""
+    result = images[:, extent[0]-sigma:extent[1]+sigma,
+                    extent[2]-sigma:extent[3]+sigma]
+    result = result.map_blocks(filter_block, dtype=np.float64,
+                               sigma=sigma, mode=mode)
+    if sigma > 0:
+        result = result[:, sigma:-sigma, sigma:-sigma]
+    return result
 
 def dask_cross_corr(data):
     """Return the dask array with the crosscorrelations of data
